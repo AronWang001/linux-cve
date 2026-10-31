@@ -1,0 +1,15 @@
+# 日志与临时文件
+*.log
+*.tmp
+fix.sh.bak
+
+# 测试产物
+tests/.tmp/
+coverage/
+
+# 编辑器 / 操作系统
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

@@ -1,0 +1,8 @@
+# 统一使用 LF，避免 Windows 检出后 shell 脚本出现 \r 报错
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.py   text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
