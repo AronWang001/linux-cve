@@ -484,4 +484,30 @@ fi
 assert_no_file "${SCEN}/state/calls/apt_install"
 end_case
 
+begin_case "D16. 空 APT 索引（容器常见）不得中断检测"
+h_scenario debian-empty-index
+h_os_release <<'EOF'
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+NAME="Debian GNU/Linux"
+VERSION_ID="12"
+VERSION_CODENAME=bookworm
+ID=debian
+EOF
+h_apt_sources bookworm
+# 容器镜像里 /var/lib/apt/lists 通常是空的，不能因此中断
+rm -f "${SCEN}/root/var/lib/apt/lists/"*
+h_install_deb linux-image-6.1.0-54-amd64 6.1.190-1 6.1.0-54-amd64
+h_set_kernel 6.1.0-54-amd64
+h_run --check
+assert_rc 0
+assert_has "判定结果：已修复"
+assert_lacks "未找到可用的 APT 软件源配置"
+
+# 加上容器标记后仍应正常输出，并给出容器判定
+: >"${SCEN}/root/.dockerenv"
+h_run --check
+assert_rc 4
+assert_has "容器环境"
+end_case
+
 finish_suite

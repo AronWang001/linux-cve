@@ -297,13 +297,20 @@ detect_pm_sources() {
                 fi
             done
 
-            [[ ${APT_SOURCE_COUNT} -eq 0 ]] &&
+            if [[ ${APT_SOURCE_COUNT} -eq 0 ]]; then
                 die "未找到可用的 APT 软件源配置（/etc/apt/sources.list 或 sources.list.d/*），已停止。"
+            fi
 
             if grep -RqsE 'security\.debian\.org|ubuntu\.com/security|security\.ubuntu\.com' "${files[@]}" 2>/dev/null; then
                 APT_SECURITY=1
             fi
-            [[ ${#lists[@]} -gt 0 ]] && HAS_APT_LISTS=1
+
+            # 注意：这里必须用 if 而不是 `[[ ]] && 赋值`。
+            # 后者在条件为假时会让函数返回 1，配合 set -e 会直接中断脚本，
+            # 而「容器里 /var/lib/apt/lists 为空」是完全正常的场景。
+            if [[ ${#lists[@]} -gt 0 ]]; then
+                HAS_APT_LISTS=1
+            fi
             ;;
         rpm)
             shopt -q nullglob && nullglob_was_off=0
@@ -313,14 +320,20 @@ detect_pm_sources() {
                 shopt -u nullglob
             fi
             for f in "${files[@]}"; do
-                [[ -r ${f} ]] && REPO_FILE_COUNT=$((REPO_FILE_COUNT + 1))
+                if [[ -r ${f} ]]; then
+                    REPO_FILE_COUNT=$((REPO_FILE_COUNT + 1))
+                fi
             done
             ;;
         alpine)
-            [[ -r "$(sysfile /etc/apk/repositories)" ]] && REPO_FILE_COUNT=1
+            if [[ -r "$(sysfile /etc/apk/repositories)" ]]; then
+                REPO_FILE_COUNT=1
+            fi
             ;;
         arch)
-            [[ -r "$(sysfile /etc/pacman.conf)" ]] && REPO_FILE_COUNT=1
+            if [[ -r "$(sysfile /etc/pacman.conf)" ]]; then
+                REPO_FILE_COUNT=1
+            fi
             ;;
         suse)
             shopt -q nullglob && nullglob_was_off=0
@@ -330,10 +343,14 @@ detect_pm_sources() {
                 shopt -u nullglob
             fi
             for f in "${files[@]}"; do
-                [[ -r ${f} ]] && REPO_FILE_COUNT=$((REPO_FILE_COUNT + 1))
+                if [[ -r ${f} ]]; then
+                    REPO_FILE_COUNT=$((REPO_FILE_COUNT + 1))
+                fi
             done
             ;;
     esac
+
+    return 0
 }
 
 print_environment() {

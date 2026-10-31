@@ -250,7 +250,7 @@ reboot
 | 套件 | 用例数 | 覆盖内容 |
 |---|---|---|
 | `tests/test.sh` | 26 | v1.0.0 的 Debian 回归：环境识别、四态判定、APT 更新/安装/initramfs/GRUB 失败、`--check`、取消、完整安装、回移分支、版本比较、静态检查 |
-| `tests/test_detection.sh` | 15 | Ubuntu 20.04/22.04/24.04、RHEL 8/9/10、Rocky/Alma 区分、Oracle UEK/RHCK 区分、AL2/AL2023 区分、Fedora/SUSE/Arch/Alpine 识别、x86_64/aarch64、架构拒绝、未修复不安装、公告不可达、缺基线、容器、`--list-distros`/`--report` |
+| `tests/test_detection.sh` | 16 | Ubuntu 20.04/22.04/24.04、RHEL 8/9/10、Rocky/Alma 区分、Oracle UEK/RHCK 区分、AL2/AL2023 区分、Fedora/SUSE/Arch/Alpine 识别、x86_64/aarch64、架构拒绝、未修复不安装、公告不可达、缺基线、容器、空 APT 索引不中断、`--list-distros`/`--report` |
 | `tests/test_amazon_linux.sh` | 11 | AL2 4.14/5.10/5.15 与 AL2023 6.1/6.12/6.18 独立基线、完整安装、dnf 失败、initramfs 缺失、取消 |
 | `tests/test_version.sh` | 5 | RPM EVR（epoch/release/波浪号）、apk 修订号与后缀、pacman、dpkg 回移、未知家族 |
 | `tests/test_safety.sh` | 8 | 非白名单发行版 `--yes` 也不安装、`--check` 只读、`--report` 无副作用、adapter 能力声明、白名单最小化、静态扫描 |

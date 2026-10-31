@@ -59,7 +59,7 @@
 
 ### 测试
 
-- 5 个测试套件：Debian 回归 26 例、发行版识别 15 例、Amazon Linux 适配 11 例、版本比较 5 例、安全边界 8 例。
+- 5 个测试套件共 66 个用例：Debian 回归 26 例、发行版识别 16 例、Amazon Linux 适配 11 例、版本比较 5 例、安全边界 8 例。
 - 新增模拟器 `tests/lib/mocks_pm.py`（rpm/dnf/yum/apk/pacman）与公共骨架 `tests/lib/harness.sh`，全部在假根目录中运行，不触碰真实系统。
 - 新增容器冒烟 `tests/container_smoke.sh`：Debian 12/13、Ubuntu 22.04/24.04、Rocky 9、Alma 9、Fedora、openSUSE Leap、Alpine、Arch、Amazon Linux 2/2023 的识别校验。
 - GitHub Actions 三个 job：`shellcheck`、`unit`（5 个套件）、`distro-smoke`（容器矩阵）。
@@ -83,6 +83,7 @@
 4. AL2023 的 6.12/6.18 内核对在判定输出中只显示笼统的 `kernel` → 改为显示真实运行内核包名（`kernel6.12` 等）。
 5. 测试用包管理器模拟器把新内核写到了错误的根目录，导致安装后校验误判 → 统一读取 `FIX_SYSROOT`。
 6. 测试模拟器未按 `--latest-limit 1` 的取值解析位置参数，`repoquery` 目标包名被误认为 `1` → 统一参数解析。
+7. `detect_pm_sources` 用了 `[[ 条件 ]] && 赋值` 作为分支最后一条语句：条件为假时函数返回 1，在 `set -e` 下直接中断脚本。Debian/Ubuntu 容器内 `/var/lib/apt/lists` 为空时必现（由容器冒烟测试发现）→ 全部改为 `if` 块并显式 `return 0`，同时补充「空 APT 索引」回归用例。
 
 ## [1.0.0] - 2026-11-01
 
