@@ -184,6 +184,12 @@ EOF
 
 MOCKBIN_POSIX="$(cygpath -u "${MOCKBIN}" 2>/dev/null || printf '%s' "${MOCKBIN}")"
 
+# 预热模拟器：Windows/Git Bash 下首次执行新生成的脚本可能因安全软件扫描而异常缓慢，
+# 先各执行一次，避免首个用例被首次启动开销拖垮（不影响任何断言）。
+for prog in dpkg dpkg-query apt-get apt-cache update-grub uname; do
+    "${MOCKBIN_POSIX}/${prog}" --version >/dev/null 2>&1 || true
+done
+
 # ---------------------------------------------------------------------------
 # 场景构造
 # ---------------------------------------------------------------------------
@@ -356,20 +362,20 @@ assert_has "判定结果：已修复"
 assert_has "6.12.113-1"
 end_case
 
-begin_case "3. 非 Debian 系统拒绝执行"
-scenario ubuntu bookworm
+begin_case "3. 不支持的系统拒绝执行"
+# v1.1.0 起 Ubuntu 已进入「支持检测」列表，因此用真正未收录的发行版做拒绝样本
+scenario unsupported bookworm
 cat >"${SCEN}/root/etc/os-release" <<'EOF'
-PRETTY_NAME="Ubuntu 24.04.1 LTS"
-NAME="Ubuntu"
-VERSION_ID="24.04"
-VERSION_CODENAME=noble
-ID=ubuntu
-ID_LIKE=debian
+PRETTY_NAME="Gentoo Linux"
+NAME=Gentoo
+VERSION_ID="2.17"
+ID=gentoo
 EOF
 run_fix --check
 assert_rc 1
-assert_has "不是 Debian"
-assert_has "拒绝执行"
+assert_has "判定结果：不支持"
+assert_has "不在本工具支持的发行版列表中"
+assert_no_file "${SCEN}/state/calls/apt_install"
 
 scenario debian14 bookworm
 cat >"${SCEN}/root/etc/os-release" <<'EOF'
@@ -529,7 +535,7 @@ assert_has "退出码"
 
 run_fix --version
 assert_rc 0
-assert_has "1.0.0"
+assert_has "1.1.0"
 
 run_fix --bogus
 assert_rc 1
@@ -557,7 +563,7 @@ assert_rc 3
 assert_has "apt-get install"
 assert_has "已安装修复内核：6.1.0-54-amd64"
 assert_has "initramfs 已生成"
-assert_has "GRUB 配置已包含新内核"
+assert_has "引导配置已包含新内核：/boot/grub/grub.cfg"
 assert_has "新内核已经安装，但当前服务器仍在运行旧内核"
 assert_has "是否需要重启"
 assert_has "reboot"
@@ -717,23 +723,43 @@ end_case
 # ---------------------------------------------------------------------------
 
 begin_case "26. 静态安全检查（无危险操作）"
-if grep -q 'set -Eeuo pipefail' "${FIX_SH}"; then
-    :
-else
-    fail "缺少 set -Eeuo pipefail"
-fi
-
-for pattern in 'apt-get[^|]*upgrade' 'apt-get[^|]*dist-upgrade' 'rm[[:space:]]+-[rf]' 'shutdown[[:space:]]+-r' 'systemctl[[:space:]]+reboot' 'curl[[:space:]]' 'wget[[:space:]]' 'allow-unauthenticated'; do
-    if grep -Eq -- "${pattern}" "${FIX_SH}"; then
-        fail "脚本包含被禁止的操作：${pattern}"
+# v1.1.0 拆分为多文件，静态检查必须覆盖全部脚本
+SH_FILES=("${FIX_SH}" "${REPO_DIR}/lib/"*.sh "${REPO_DIR}/adapters/"*.sh)
+for f in "${SH_FILES[@]}"; do
+    if ! grep -q 'set -Eeuo pipefail' "${FIX_SH}"; then
+        fail "缺少 set -Eeuo pipefail"
+        break
     fi
 done
 
-if grep -Eq '^[[:space:]]*(sudo[[:space:]]+)?reboot[[:space:]]*$' "${FIX_SH}"; then
-    fail "脚本包含直接调用 reboot 的语句"
-fi
+for f in "${SH_FILES[@]}"; do
+    for pattern in \
+        'apt-get[^|]*dist-upgrade' \
+        'apt-get[^|]*-y[^|]*upgrade' \
+        'dnf[^|]*upgrade[^|]*--all' \
+        'rm[[:space:]]+-[rf]+[[:space:]]+/(boot|lib/modules|usr/lib/modules)' \
+        'shutdown[[:space:]]+-r' \
+        'systemctl[[:space:]]+reboot' \
+        'curl[[:space:]]' \
+        'wget[[:space:]]' \
+        'allow-unauthenticated' \
+        '--nogpgcheck'; do
+        if grep -Eq -- "${pattern}" "${f}"; then
+            fail "脚本 ${f#"${REPO_DIR}/"} 包含被禁止的操作：${pattern}"
+        fi
+    done
+    if grep -Eq '^[[:space:]]*(sudo[[:space:]]+)?reboot([[:space:]]|$)' "${f}"; then
+        fail "脚本 ${f#"${REPO_DIR}/"} 包含直接调用 reboot 的语句"
+    fi
+done
 
-if ! command -v shellcheck >/dev/null 2>&1; then
+if command -v shellcheck >/dev/null 2>&1; then
+    SC_OUTPUT="$(shellcheck -S style -x "${SH_FILES[@]}" 2>&1 || true)"
+    if [[ -n ${SC_OUTPUT} ]]; then
+        printf '%s\n' "${SC_OUTPUT}" | head -n 40
+        fail "ShellCheck 报告问题"
+    fi
+else
     printf '    %s·%s 未安装 shellcheck，跳过静态检查（见 README 安装方式）\n' "${C_DIM}" "${C_RESET}"
 fi
 end_case

@@ -45,7 +45,7 @@ def read_tsv(name):
 
 
 def write_tsv(name, rows):
-    with open(state_path(name), "w", encoding="utf-8") as handle:
+    with open(state_path(name), "w", encoding="utf-8", newline="\n") as handle:
         for row in rows:
             handle.write("\t".join(row) + "\n")
 
@@ -56,7 +56,7 @@ def flag(name):
 
 def mark(name):
     os.makedirs(state_path("calls"), exist_ok=True)
-    with open(state_path("calls", name), "w", encoding="utf-8") as handle:
+    with open(state_path("calls", name), "w", encoding="utf-8", newline="\n") as handle:
         handle.write("1\n")
 
 
@@ -437,7 +437,7 @@ def cmd_update_grub(argv):
             exclude = {line.strip() for line in handle if line.strip()}
     cfg = root_file("/boot/grub/grub.cfg")
     os.makedirs(os.path.dirname(cfg), exist_ok=True)
-    with open(cfg, "w", encoding="utf-8") as handle:
+    with open(cfg, "w", encoding="utf-8", newline="\n") as handle:
         handle.write("### BEGIN /etc/grub.d/10_linux ###\n")
         for pkg in sorted(installed()):
             if not pkg.startswith("linux-image-"):

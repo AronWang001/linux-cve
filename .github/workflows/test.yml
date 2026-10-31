@@ -11,10 +11,10 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: ShellCheck + 测试套件
+  shellcheck:
+    name: ShellCheck 静态检查
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
 
     steps:
       - name: 检出代码
@@ -28,8 +28,98 @@ jobs:
           sudo install shellcheck-v0.11.0/shellcheck /usr/local/bin/shellcheck
           shellcheck --version
 
-      - name: ShellCheck 静态检查
-        run: shellcheck -S style fix.sh tests/test.sh
+      - name: 检查全部脚本
+        run: |
+          shellcheck -S style \
+            fix.sh \
+            lib/*.sh \
+            adapters/*.sh \
+            tests/*.sh \
+            tests/lib/*.sh
 
-      - name: 运行测试套件
+  unit:
+    name: 单元与回归测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 检查 Python
+        run: python3 --version
+
+      - name: 安装 ShellCheck（供 test.sh 第 26 个用例使用）
+        run: |
+          curl -fsSL -o shellcheck.tar.xz \
+            https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
+          tar -xJf shellcheck.tar.xz
+          sudo install shellcheck-v0.11.0/shellcheck /usr/local/bin/shellcheck
+          shellcheck --version
+
+      - name: Debian 回归测试（v1.0.0 的 26 个用例）
         run: bash tests/test.sh
+
+      - name: 多发行版识别与状态机
+        run: bash tests/test_detection.sh
+
+      - name: Amazon Linux 适配
+        run: bash tests/test_amazon_linux.sh
+
+      - name: 版本比较边界
+        run: bash tests/test_version.sh
+
+      - name: 安全边界
+        run: bash tests/test_safety.sh
+
+  distro-smoke:
+    name: 真实发行版识别（${{ matrix.name }}）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Debian 12
+            image: debian:12
+            expect: "Debian GNU/Linux 12"
+          - name: Debian 13
+            image: debian:13
+            expect: "Debian GNU/Linux 13"
+          - name: Ubuntu 24.04
+            image: ubuntu:24.04
+            expect: "Ubuntu 24.04"
+          - name: Ubuntu 22.04
+            image: ubuntu:22.04
+            expect: "Ubuntu 22.04"
+          - name: Rocky Linux 9
+            image: rockylinux:9
+            expect: "Rocky Linux 9"
+          - name: AlmaLinux 9
+            image: almalinux:9
+            expect: "AlmaLinux 9"
+          - name: Fedora
+            image: fedora:latest
+            expect: "Fedora Linux"
+          - name: openSUSE Leap
+            image: opensuse/leap:15.6
+            expect: "openSUSE Leap"
+          - name: Alpine
+            image: alpine:3.20
+            expect: "Alpine Linux"
+          - name: Arch Linux
+            image: archlinux:latest
+            expect: "Arch Linux"
+          - name: Amazon Linux 2023
+            image: amazonlinux:2023
+            expect: "Amazon Linux 2023"
+          - name: Amazon Linux 2
+            image: amazonlinux:2
+            expect: "Amazon Linux 2"
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 容器内只读识别
+        run: bash tests/container_smoke.sh "${{ matrix.image }}" "${{ matrix.expect }}"
