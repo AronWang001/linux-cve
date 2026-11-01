@@ -5,19 +5,26 @@
 # 作用：把指定 Tag 的完整工具包下载到临时目录，校验 fix.sh 的 SHA256 后
 #       以同样的参数调用 fix.sh。本文件不含任何系统修改逻辑。
 #
-# 用法：
-#   curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.1/install.sh -o install.sh
-#   sudo bash install.sh --check
+# 用法（以下命令可直接整条粘贴执行）：
+#   一键修复（交互式，确认后直接执行修复）：
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.2/install.sh | sudo bash
 #
-# 不落地执行（下载失败时不会执行任何内容）：
-#   bash <(curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.1/install.sh) --check
+#   只读检查：
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.2/install.sh | sudo bash -s -- --check
+#
+#   免交互执行（跳过确认，但不跳过白名单、公告核验与版本校验）：
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.2/install.sh | sudo bash -s -- --yes
+#
+#   先下载再审查：
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.2/install.sh -o install.sh
+#     less install.sh && sudo bash install.sh
 #
 # License: MIT
 
 set -Eeuo pipefail
 
 readonly REPO="AronWang001/linux-cve-2026-98432-fix"
-readonly VERSION="1.1.1"
+readonly VERSION="1.1.2"
 readonly TAG="v${VERSION}"
 readonly SRC_NAME="${REPO##*/}"   # GitHub 归档解压后的目录名前缀
 readonly TARBALL="https://github.com/${REPO}/archive/refs/tags/${TAG}.tar.gz"
