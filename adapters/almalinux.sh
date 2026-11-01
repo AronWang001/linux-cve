@@ -8,8 +8,14 @@
 #
 # adapter: AlmaLinux
 #
-# errata.full.json 中无该 CVE 记录，但「缺少勘误」不等于「确认未修复」，
-# 因此状态为 UNKNOWN，只检测。
+# 2026-10-30 官方公告：修复内核已进入 testing 仓库，等待社区验证后才会
+# 进入 production 仓库。测试仓库版本：
+#   AlmaLinux 8  kernel-4.18.0-553.180.2.el8_10
+#   AlmaLinux 9  kernel-5.14.0-687.61.2.el9_8
+#   AlmaLinux 10 kernel-6.12.0-211.69.2.el10_2
+#
+# 测试仓库有包不等于生产仓库已发布，本适配器不会启用 testing 源，
+# 也不会安装测试内核，状态统一为 PATCH_TESTING_ONLY。
 
 ADAPTER_ID="almalinux"
 ADAPTER_DATA_DISTRO="almalinux"
@@ -17,8 +23,10 @@ ADAPTER_NAME="AlmaLinux"
 ADAPTER_FAMILY="rpm"
 ADAPTER_DETECT_SUPPORTED=1
 ADAPTER_AUTOFIX_DEFAULT=0
+ADAPTER_STRICT_BASELINE=1
+ADAPTER_RELEASES="8,9,10"
 ADAPTER_ARCHES="amd64,arm64"
 ADAPTER_KERNEL_FLAVORS="kernel"
-ADAPTER_ADVISORY_URL="https://errata.almalinux.org/"
-ADAPTER_UPDATE_PROCEDURE="未完成自动修复适配，仅检测"
-ADAPTER_NOTES="不把 AlmaLinux 自动等同于 RHEL。"
+ADAPTER_ADVISORY_URL="https://almalinux.org/blog/2026-10-30-cve-2026-98432/"
+ADAPTER_UPDATE_PROCEDURE="等待官方 production 仓库发布后手工升级"
+ADAPTER_NOTES="官方仅提供 testing 仓库补丁，禁止启用 testing 源或自动安装。"

@@ -87,7 +87,8 @@ _rpm_is_kernel_pkg() {
     case "$1" in
         kernel | kernel-core | kernel-uek | kernel-uek-core) return 0 ;;
         kernel-rt | kernel-rt-core | kernel-default | kernel-default-base) return 0 ;;
-        kernel-lpae | kernel-vanilla | kernel-kvmsmall | kernel-64k) return 0 ;;
+        kernel-lpae | kernel-vanilla | kernel-kvmsmall | kernel-64k | kernel-64kb) return 0 ;;
+        kernel-azure | kernel-azure-core | kernel-uek64k) return 0 ;;
         kernel6.*) [[ "$1" =~ ^kernel6\.[0-9]+(-core)?$ ]] && return 0 ;;
     esac
     return 1
@@ -197,7 +198,11 @@ kernel_resolve_running() {
             local pkg="" evr="" ident=""
             while IFS=$'\t' read -r pkg evr ident; do
                 [[ -n ${evr} ]] || continue
-                if [[ ${KERNEL_RELEASE} == "${evr}" ]] || [[ ${KERNEL_RELEASE} == "${evr}".* ]]; then
+                # uname -r 可能是 EVR 本身（部分 RHEL 系）、EVR + .arch（UEK/RHCK）
+                # 或 EVR + -flavor（SUSE，如 6.4.0-150600.23.143-default）
+                if [[ ${KERNEL_RELEASE} == "${evr}" ]] ||
+                    [[ ${KERNEL_RELEASE} == "${evr}".* ]] ||
+                    [[ ${KERNEL_RELEASE} == "${evr}"-* ]]; then
                     RUNNING_PKG="${pkg}"
                     RUNNING_VERSION="${evr}"
                     RUNNING_IDENT="${evr}"

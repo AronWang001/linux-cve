@@ -33,6 +33,22 @@ assess() {
     AUTOFIX=0
     INSTALLED_FIXED_RELEASE=""
     INSTALLED_FIXED_VERSION=""
+    # 提前初始化，避免在提前返回的分支里被 print_assessment / write_report 读取时报 unbound
+    BASE_STATUS=""
+    FIXED_VERSION=""
+    ADVISORY=""
+    ADVISORY_URL=""
+    BASELINE_VERIFIED=""
+    BASELINE_NOTE=""
+    BASELINE_PACKAGE=""
+    BASELINE_AUTOFIX=""
+    BASELINE_FAMILY=""
+    BASELINE_CHANNEL=""
+    BASELINE_STREAM=""
+    BASELINE_ADV_STATUS=""
+    BASELINE_TESTED_INSTALL=""
+    BASELINE_TESTED_REBOOT=""
+    BASELINE_PROCEDURE=""
 
     # 1) 发行版身份
     if [[ -z ${DISTRO_FAMILY} ]] || [[ ${ADAPTER_DETECT_SUPPORTED:-0} -ne 1 ]]; then
@@ -77,7 +93,23 @@ assess() {
     fi
 
     # 7) 官方基线
-    if ! baseline_lookup "${ADAPTER_DATA_DISTRO}" "${DISTRO_RELEASE}" "${KERNEL_BRANCH}"; then
+    # 新适配发行版按「产品 + 版本 + 内核分支 + 软件包 + 架构」严格匹配：
+    # 通配记录、flavor 不匹配或多条记录冲突都按 UNKNOWN 处理。
+    if [[ ${ADAPTER_STRICT_BASELINE:-0} -eq 1 ]]; then
+        local exact_rc=0
+        baseline_lookup_exact "${ADAPTER_DATA_DISTRO}" "${DISTRO_RELEASE}" \
+            "${KERNEL_BRANCH}" "${RUNNING_PKG}" "${ARCH}" "${PRODUCT_KEY:-}" || exact_rc=$?
+        if [[ ${exact_rc} -eq 2 ]]; then
+            STATUS="${ST_UNKNOWN}"
+            STATUS_REASON="基线表中存在多条同时匹配的记录（${ADAPTER_NAME} ${DISTRO_RELEASE} / ${KERNEL_BRANCH} / ${RUNNING_PKG} / ${ARCH}），无法确定唯一修复版本，已停止。"
+            return 0
+        fi
+        if [[ ${exact_rc} -ne 0 ]]; then
+            STATUS="${ST_UNKNOWN}"
+            STATUS_REASON="基线表未收录该组合（${ADAPTER_NAME} ${DISTRO_RELEASE} / 内核 ${KERNEL_BRANCH} / 包 ${RUNNING_PKG} / 架构 ${ARCH}），无法确认安全状态。"
+            return 0
+        fi
+    elif ! baseline_lookup "${ADAPTER_DATA_DISTRO}" "${DISTRO_RELEASE}" "${KERNEL_BRANCH}"; then
         STATUS="${ST_UNKNOWN}"
         STATUS_REASON="运行内核分支 ${KERNEL_BRANCH} 不在已核实的修复版本表中（${ADAPTER_NAME} ${DISTRO_RELEASE}），无法确认安全状态。"
         return 0
@@ -86,7 +118,12 @@ assess() {
     case "${BASE_STATUS}" in
         fixed)
             ;;
-        patch_not_released)
+        testing)
+            STATUS="${ST_TESTING}"
+            STATUS_REASON="官方仅在 testing 仓库提供修复包（${ADVISORY}，核验日期 ${BASELINE_VERIFIED}）：${BASELINE_NOTE}"
+            return 0
+            ;;
+        patch_not_released | in_progress)
             STATUS="${ST_NOT_RELEASED}"
             STATUS_REASON="官方尚未发布可确认的修复包（${ADVISORY}，核验日期 ${BASELINE_VERIFIED}），本机仍可能受影响，但无包可装。"
             return 0
@@ -119,8 +156,13 @@ assess() {
     STATUS="${ST_VULN_FIXABLE}"
     STATUS_REASON="当前运行内核软件包版本 ${RUNNING_VERSION} 低于官方修复版本 ${FIXED_VERSION}（分支 ${KERNEL_BRANCH}）。"
 
+    # 自动修复需要三重条件：适配器默认允许、基线显式 autofix、严格模式下
+    # 还必须具备真实安装与重启验证记录（容器/模拟测试不算）。
     if [[ ${ADAPTER_AUTOFIX_DEFAULT} -eq 1 ]] && [[ ${BASELINE_AUTOFIX} == "yes" ]]; then
-        AUTOFIX=1
+        if [[ ${ADAPTER_STRICT_BASELINE:-0} -ne 1 ]] ||
+            { [[ ${BASELINE_TESTED_INSTALL} == "yes" ]] && [[ ${BASELINE_TESTED_REBOOT} == "yes" ]]; }; then
+            AUTOFIX=1
+        fi
     fi
     return 0
 }
@@ -142,6 +184,14 @@ print_assessment() {
     kv "基线核对" "${BASELINE_VERIFIED:-未核验} · ${ADVISORY_URL:-${ADAPTER_ADVISORY_URL:-}}"
     kv "内核分支" "${KERNEL_BRANCH}"
     kv "修复版本" "${FIXED_VERSION:-未知}"
+    if [[ -n ${BASELINE_CHANNEL} ]]; then
+        kv "仓库渠道" "${BASELINE_CHANNEL}"
+    fi
+    # SUSE Micro 等产品必须走 transactional-update，普通 zypper 安装流程不适用；
+    # 这类信息必须显式告知用户，否则「有修复包」会被误解为「可以直接装」。
+    if [[ -n ${BASELINE_PROCEDURE} ]]; then
+        kv "更新方式" "${BASELINE_PROCEDURE}"
+    fi
     kv "运行内核" "${KERNEL_RELEASE}"
     kv "运行版本" "${RUNNING_VERSION:-未知}"
     kv "自动修复" "$([[ ${AUTOFIX} -eq 1 ]] && printf '已启用' || printf '未启用（仅检测）')"
@@ -158,6 +208,9 @@ print_assessment() {
             ;;
         "${ST_NOT_RELEASED}")
             printf '  %s判定结果：官方尚未修复%s\n' "${C_YELLOW}${C_BOLD}" "${C_RESET}"
+            ;;
+        "${ST_TESTING}")
+            printf '  %s判定结果：仅测试仓库有补丁%s\n' "${C_YELLOW}${C_BOLD}" "${C_RESET}"
             ;;
         "${ST_UNSUPPORTED}")
             printf '  %s判定结果：不支持%s\n' "${C_YELLOW}${C_BOLD}" "${C_RESET}"

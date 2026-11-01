@@ -6,7 +6,7 @@ This tool checks whether the kernel currently running on a Linux server is affec
 
 Automatic remediation is limited to Debian 12/13 and Amazon Linux 2/2023. Ubuntu and Red Hat Enterprise Linux are detection-only because no confirmed fixed package has been published. All other listed distributions are identified and reported but never enter the installation path. See [Supported Distributions](#supported-distributions) for the current matrix.
 
-Current version: v1.1.2. See [CHANGELOG.md](CHANGELOG.md) for changes.
+Current version: v1.2.0. See [CHANGELOG.md](CHANGELOG.md) for changes.
 
 ## Vulnerability Information
 
@@ -17,7 +17,7 @@ Current version: v1.1.2. See [CHANGELOG.md](CHANGELOG.md) for changes.
 | Class | Use-after-free |
 | Trigger | When retransmitted TCP SYNs are processed concurrently, or when request-socket migration is enabled via `tcp_migrate_req`, `inet_opt` and `ireq_opt` may be freed before the RCU grace period ends |
 | Impact | Kernel memory corruption that can lead to denial of service. The exact impact and exploitation requirements are defined by each distribution's advisory |
-| Upstream fix | `ipv4: free inet_opt and ireq_opt after an RCU grace period` (mainline 7.3-rc7) |
+| Upstream fix | `ipv4: free inet_opt and ireq_opt after an RCU grace period`, merged in 7.2.10, 6.18.56, 6.12.113, and 6.1.190 (commit `26d4c36d318c`) |
 | Published | 2026-10-15 |
 
 Whether a distribution is affected and which version carries the fix are determined by that distribution's own advisory. The tool does not infer one distribution's status from another's, does not derive distribution fix status from the upstream version number, and does not assess CVSS scores or real-world exploitability.
@@ -44,17 +44,17 @@ Whether a distribution is affected and which version carries the fix are determi
 ### One-command execution
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.2/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh | sudo bash
 ```
 
-`install.sh` is a bootstrap installer and makes no system changes itself. It downloads the source archive for the pinned tag into a temporary directory, verifies the hash of `fix.sh` after extraction, and then executes `fix.sh` with the same arguments. After detection it prints the planned change and installs the kernel only after you answer `Y`. The confirmation prompt reads from `/dev/tty`, so it still works when the installer is piped into `bash`; `sudo` may ask for a password.
+`install.sh` is a bootstrap installer and makes no system changes itself. It downloads the source archive for the pinned tag into a temporary directory, fetches `SHA256SUMS` from the release, verifies `fix.sh`, `install.sh`, every file under `lib/` and `adapters/`, and the baseline YAML under `data/`, and only then executes `fix.sh` with the same arguments. After detection it prints the planned change and installs the kernel only after you answer `Y`. The confirmation prompt reads from `/dev/tty`, so it still works when the installer is piped into `bash`; `sudo` may ask for a password.
 
-Verification is deliberately narrow: only the `fix.sh` hash recorded in the release's `SHA256SUMS` is compared. The archive as a whole, and files such as those under `lib/`, `adapters/`, and `data/`, are not individually verified. If `SHA256SUMS` cannot be fetched, the check is skipped with a warning; if neither `sha256sum` nor `shasum` is available, it is skipped as well. A hash mismatch aborts immediately, before any system operation. For production use, download and review the script first.
+Verification fails closed. A missing or empty `SHA256SUMS`, a manifest that does not cover every script, any hash mismatch, an absolute path or `..` in the archive, or the absence of both `sha256sum` and `shasum` stops the run before any tool code executes. `SHA256SUMS` comes from the same repository as the archive and is not an independent signature; it must not be described as signature verification. Downloading and reviewing the script before production use is still recommended.
 
 ### Read-only check
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.2/install.sh | sudo bash -s -- --check
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh | sudo bash -s -- --check
 ```
 
 This reads system state only: no repository index refresh, no package installation, no configuration changes. `--check` governs the detection and remediation phases; it does not prevent `install.sh` from downloading the archive. If the local package index is empty, candidate versions will be reported as unknown, so run `apt-get update` or `dnf makecache` first.
@@ -62,7 +62,7 @@ This reads system state only: no repository index refresh, no package installati
 ### Unattended execution
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.2/install.sh | sudo bash -s -- --yes
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh | sudo bash -s -- --yes
 ```
 
 `--yes` skips the confirmation prompt only. It does not bypass the distribution allowlist, advisory verification, or version checks. Distributions outside the allowlist never enter the installation path, even with `--yes`.
@@ -70,7 +70,7 @@ curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fi
 ### Download, review, then run
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.2/install.sh
+curl -fsSLO https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh
 less install.sh
 sudo bash install.sh --check
 sudo bash install.sh
@@ -81,7 +81,7 @@ sudo bash install.sh
 `fix.sh` depends on the `lib/`, `adapters/`, and `data/` directories next to it and cannot be used on its own:
 
 ```bash
-git clone --branch v1.1.2 --depth 1 https://github.com/AronWang001/linux-cve-2026-98432-fix.git
+git clone --branch v1.2.0 --depth 1 https://github.com/AronWang001/linux-cve-2026-98432-fix.git
 cd linux-cve-2026-98432-fix
 sudo bash fix.sh --check
 sudo bash fix.sh
@@ -89,18 +89,19 @@ sudo bash fix.sh
 
 ### Verify release artifacts
 
-`SHA256SUMS` lists both `fix.sh` and `install.sh`, so both files must be present in the same directory for the check to pass:
+`SHA256SUMS` covers `fix.sh`, `install.sh`, every script under `lib/` and `adapters/`, and the baseline YAML under `data/`. Verify it against the source archive:
 
 ```bash
 mkdir -p /tmp/cve-verify && cd /tmp/cve-verify
-base=https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v1.1.2
+base=https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v1.2.0
 curl -fsSLO "${base}/SHA256SUMS"
-curl -fsSLO "${base}/install.sh"
-curl -fsSLO "${base}/fix.sh"
-sha256sum -c SHA256SUMS
+curl -fsSL -o src.tar.gz https://github.com/AronWang001/linux-cve-2026-98432-fix/archive/refs/tags/v1.2.0.tar.gz
+tar -xzf src.tar.gz
+cd linux-cve-2026-98432-fix-1.2.0
+sha256sum -c ../SHA256SUMS
 ```
 
-Expected output is `fix.sh: OK` and `install.sh: OK`. Where `sha256sum` is unavailable, use `shasum -a 256 -c SHA256SUMS`.
+Every entry should report `OK`. The extracted directory name follows the repository name; adjust it if it differs. Where `sha256sum` is unavailable, use `shasum -a 256 -c ../SHA256SUMS`.
 
 ## Options and Exit Codes
 
@@ -124,6 +125,7 @@ Expected output is `fix.sh: OK` and `install.sh: OK`. Where `sha256sum` is unava
 | `PENDING_REBOOT` | The fixed kernel is installed but the old kernel is still running | 3 |
 | `VULNERABLE_PATCH_AVAILABLE` | A fixed package is available and the running kernel is still affected | 2 |
 | `PATCH_NOT_RELEASED` | No confirmed fixed package has been published; status only, nothing installed | 6 |
+| `PATCH_TESTING_ONLY` | A fixed package exists only in a testing repository; production repositories do not have it, nothing installed | 7 |
 | `UNKNOWN` | Advisory, kernel origin, package mapping, or version cannot be confirmed | 4 |
 | `UNSUPPORTED` | System, release, architecture, or kernel flavor is not supported | 1 |
 | Cancelled | The operator declined at the confirmation prompt; no changes made | 5 |
@@ -162,6 +164,37 @@ The baseline was last verified on 2026-11-01. Entries come from official advisor
 
 Debian 12 uses `6.12.113-1~deb12u1`, a backport that must not be confused with `6.12.113-1` on Debian 13. All four Amazon Linux 2 branches ship a package named `kernel`, so they are distinguished by full EVR. On Amazon Linux 2023, 6.12 and 6.18 are separate packages, `kernel6.12` and `kernel6.18`, with independent baselines.
 
+### Fixed packages published, detection only
+
+For the distributions below, the official fixed packages exist and the tool reports the exact version and repository channel. Automatic remediation stays disabled because the install-and-reboot path has not been validated on a real virtual machine.
+
+| Distribution | Kernel branch | Kernel package | Fixed version | Advisory / patch | Status |
+| --- | --- | --- | --- | --- | --- |
+| Oracle Linux 8 (UEKR7) | 5.15 | `kernel-uek` | `5.15.0-325.221.6.4.el8uek` | [ELSA-2026-500398](https://linux.oracle.com/errata/ELSA-2026-500398.html) | Detection only |
+| Oracle Linux 9 (UEKR7) | 5.15 | `kernel-uek` | `5.15.0-325.221.6.4.el9uek` | [ELSA-2026-500398](https://linux.oracle.com/errata/ELSA-2026-500398.html) | Detection only |
+| Oracle Linux 8 (UEKR6) | 5.4 | `kernel-uek` | `5.4.17-2136.360.3.1.el8uek` | [ELSA-2026-500397](https://linux.oracle.com/errata/ELSA-2026-500397.html) | Detection only |
+| Oracle Linux 7 (UEKR6) | 5.4 | `kernel-uek` | `5.4.17-2136.360.3.1.el7uek` | [ELSA-2026-500397](https://linux.oracle.com/errata/ELSA-2026-500397.html) | Detection only, ELS subscription required |
+| Oracle Linux 9 (UEKR8) | 6.12 | `kernel-uek` | `6.12.0-207.111.5.4.el9uek` | [ELSA-2026-500399](https://linux.oracle.com/errata/ELSA-2026-500399.html) | Detection only |
+| Oracle Linux 10 (UEKR8) | 6.12 | `kernel-uek` | `6.12.0-207.111.5.4.el10uek` | [ELSA-2026-500399](https://linux.oracle.com/errata/ELSA-2026-500399.html) | Detection only |
+| openSUSE Leap 16.0 | 6.12 | `kernel-default` | `6.12.0-160000.40.1` | openSUSE-Leap-16.0-1973 | Detection only |
+| SLES 16.0 | 6.12 | `kernel-default` | `6.12.0-160000.40.1` | SUSE-SLES-16.0-1973 | Detection only |
+| SLES 15 SP4-LTSS | 5.14 | `kernel-default` | `5.14.21-150400.24.246.1` | SUSE-SLE-Product-SLES-15-SP4-LTSS-2026-4937 | Detection only, LTSS subscription required |
+| SLES 15 SP5-LTSS | 5.14 | `kernel-default` | `5.14.21-150500.55.195.1` | SUSE-SLE-Product-SLES-15-SP5-LTSS-2026-4936 | Detection only, LTSS subscription required |
+| SLES 15 SP6-LTSS | 6.4 | `kernel-default` | `6.4.0-150600.23.143.1` | SUSE-SLE-Product-SLES-15-SP6-LTSS-2026-4934 | Detection only, LTSS subscription required |
+| SLES 15 SP7 | 6.4 | `kernel-default` | Conflicting official status, see below | SUSE CVE page | `UNKNOWN` |
+| SLE Micro 6.2 | 6.12 | `kernel-default` | `6.12.0-160000.40.1` | SUSE-SL-Micro-6.2-1973 | Detection only, transactional updates |
+| AlmaLinux 8 | 4.18 | `kernel` | `4.18.0-553.180.2.el8_10` (testing) | [AlmaLinux announcement](https://almalinux.org/blog/2026-10-30-cve-2026-98432/) | Testing repository only |
+| AlmaLinux 9 | 5.14 | `kernel` | `5.14.0-687.61.2.el9_8` (testing) | [AlmaLinux announcement](https://almalinux.org/blog/2026-10-30-cve-2026-98432/) | Testing repository only |
+| AlmaLinux 10 | 6.12 | `kernel` | `6.12.0-211.69.2.el10_2` (testing) | [AlmaLinux announcement](https://almalinux.org/blog/2026-10-30-cve-2026-98432/) | Testing repository only |
+
+Notes:
+
+- UEKR6, UEKR7, and UEKR8 are separate baselines on Oracle Linux. The `el7uek`, `el8uek`, `el9uek`, and `el10uek` suffixes are not interchangeable, and OL8 and OL9 each carry two generations at the same time; the tool selects by the running kernel branch. RHCK has no separate erratum and remains `UNKNOWN`.
+- On SUSE, `kernel-default-base` has a longer EVR than `kernel-default` (for example `6.12.0-160000.40.1.160000.2.30` on SLES 16.0). Matching uses the installed package name, so the short EVR is never reused.
+- The official SUSE "List of released packages" section lists `kernel-default >= 6.4.0-150700.53.90.1` for SLES 15 SP7, while the product status table still reports `In progress`. The tool treats that conflict as `UNKNOWN` rather than a published fix.
+- AlmaLinux testing kernels require the `almalinux-testing` repository, which the tool never enables. The status is `PATCH_TESTING_ONLY` (exit code 7).
+- Automatic remediation is `no` for every distribution in this table; `--yes` cannot override it.
+
 ### Detection only: no fixed package published
 
 | Distribution | Official status | Advisory |
@@ -180,11 +213,9 @@ The versions marked work in progress are in-development package versions, not pu
 | Distribution | Why automatic remediation is not enabled |
 | --- | --- |
 | Rocky Linux | The errata site is a front-end application; no machine-readable erratum for this CVE was obtained. RHEL conclusions are not applied to Rocky Linux |
-| AlmaLinux | `errata.full.json` contains no record for this CVE; a missing erratum is not proof that the issue is fixed |
-| Oracle Linux | UEK and RHCK must be verified separately; no fixed EVR was obtained for either kernel |
-| Fedora Linux | The upstream fix landed in mainline 7.3-rc7; whether the current distribution kernel carries the backport cannot be confirmed |
-| openSUSE Leap / SUSE Linux Enterprise | The official CVE page rejects automated access, and these systems ship multiple kernels with boot entry selection |
-| Arch Linux | Rolling release; the security tracker has no entry for this CVE, so a fixed version number cannot be used |
+| Oracle Linux (RHCK) | Only UEK errata were published; RHCK has no separate advisory, and the UEK fixed version cannot be applied to it |
+| Fedora Linux | Stable carries 7.2.13/7.2.14, but the official build records were not checked for upstream commit `26d4c36` |
+| Arch Linux | Core ships 7.2.11, above the upstream 7.2.10 fix point, but the packaging source was not reviewed; security updates normally require a full `pacman -Syu` |
 | Alpine Linux | No record in secdb, and `linux-lts`, `linux-virt`, and `linux-edge` cannot be treated as interchangeable |
 
 These systems report distribution, release, architecture, running kernel, the corresponding kernel package, and the advisory entry point. The status is `UNKNOWN` (exit code 4) and the installation path is never reached.
@@ -207,7 +238,7 @@ These systems report distribution, release, architecture, running kernel, the co
 2. Normalize the architecture and cross-check it against the package manager's reported architecture.
 3. Map the running kernel to the installed kernel package and read its version.
 4. Look up the matching verified record in `data/cve-2026-98432.yml` to obtain the fixed version, advisory identifier, and whether automatic remediation is permitted.
-5. Compare the running kernel with the fixed version using the package manager's version semantics and emit one of six statuses.
+5. Compare the running kernel with the fixed version using the package manager's version semantics and emit one of seven statuses.
 
 ### Remediation steps
 
@@ -248,17 +279,20 @@ Before you run it:
 | Suite | Cases | Coverage |
 | --- | --- | --- |
 | `tests/test.sh` | 26 | Debian regression: environment detection, status assessment, index refresh and install failures, initramfs and bootloader failures, `--check`, operator cancellation, full installation, backport branch, version comparison, static checks |
-| `tests/test_detection.sh` | 16 | Ubuntu 20.04/22.04/24.04, RHEL 8/9/10, Rocky vs AlmaLinux, Oracle UEK vs RHCK, AL2 vs AL2023, Fedora/SUSE/Arch/Alpine identification, x86_64 and aarch64, architecture rejection, no install when no fix exists, unreachable advisory, missing baseline, container environment, empty APT index, `--list-distros` and `--report` |
+| `tests/test_detection.sh` | 16 | Ubuntu 20.04/22.04/24.04, RHEL 8/9/10, Rocky vs AlmaLinux (testing-only), Oracle UEK vs RHCK, AL2 vs AL2023, Fedora/SUSE/Arch/Alpine identification, x86_64 and aarch64, architecture rejection, no install when no fix exists, UNKNOWN on contradictory advisory status, missing baseline, container environment, empty APT index, `--list-distros` and `--report` |
 | `tests/test_amazon_linux.sh` | 11 | Independent baselines for AL2 4.14/5.10/5.15 and AL2023 6.1/6.12/6.18, full installation, dnf failure, missing initramfs, operator cancellation |
 | `tests/test_version.sh` | 5 | RPM EVR (epoch, release, `~`), apk revision and suffixes, pacman, dpkg backport versions, unknown version families |
 | `tests/test_safety.sh` | 8 | No installation on non-allowlisted distributions even with `--yes`, `--check` is read-only, `--report` has no side effects, adapter capability declarations are complete, allowlist minimality, static scan |
+| `tests/test_new_distros.sh` | 14 | Oracle UEKR6/R7/R8 and RHCK rejection, SUSE product/service pack/flavor matching, SP7 status conflict, SLE Micro transactional updates, AlmaLinux testing and `--yes` cannot bypass |
+| `tests/test_baseline.sh` | 7 | Baseline static checks: unique IDs and combination keys, complete EVR and advisory, no wildcard `fixed` records, evidence for `autofix=yes` |
+| `tests/test_installer.sh` | 7 | Whole-archive verification: hash mismatch, missing manifest entry, path traversal, unsafe archive member, clean manifest passes |
 
-66 cases in total.
+94 cases in total.
 
 ### Test environments
 
 - Local: Windows with Git Bash. A fake root is assembled and mock implementations of `dpkg`, `apt-get`, `rpm`, `dnf`, `yum`, `apk`, `pacman`, and `uname` are injected.
-- CI: GitHub Actions runs the five suites plus ShellCheck 0.11.0 (`-S style -x`), and a read-only identification smoke job across 12 distribution containers.
+- CI: GitHub Actions runs the eight suites plus ShellCheck 0.11.0 (`-S style -x`), and a read-only identification smoke job across 12 distribution containers.
 - Container smoke coverage: Debian 12/13, Ubuntu 22.04/24.04, Rocky Linux 9, AlmaLinux 9, Fedora, openSUSE Leap 15.6, Alpine 3.20, Arch Linux, Amazon Linux 2/2023.
 
 ### What the tests do not cover
@@ -267,15 +301,20 @@ The suites validate assessment logic, installation flow, and failure handling ag
 
 ## Known Limitations
 
-1. Automatic remediation covers Debian 12/13 and Amazon Linux 2/2023 only. Every other listed distribution is detection-only or identification-only.
-2. Amazon Linux kernel installation has not been performed on a real AWS instance. Its `dnf`/`yum` flow, post-reboot effect, and boot behavior are covered by mocked tests.
-3. Debian is supported on amd64 only. Remediation support for other distributions follows the support matrix.
-4. Container environments are not assessed and return `UNKNOWN`.
-5. Self-built or third-party kernels cannot be mapped to a distribution package and return `UNKNOWN`.
-6. Amazon Linux `kernel-livepatch` is out of scope; remediation means booting into the new kernel.
-7. On RPM-based systems the tool does not rebuild the boot configuration. If a boot entry is missing it stops and prints the manual command.
-8. Distribution derivatives do not inherit conclusions. Rocky Linux, AlmaLinux, and Oracle Linux never use RHEL results.
-9. Baseline updates are committed manually after checking official advisories. The tool does not fetch advisories at runtime.
+1. Automatic remediation covers Debian 12/13 and Amazon Linux 2/2023 only. Oracle Linux UEK, SUSE/openSUSE, and AlmaLinux are detection-only; every baseline record for them has `autofix: no`.
+2. The new Oracle Linux, SUSE/openSUSE, and AlmaLinux baselines have not been validated on a real virtual machine through install, boot entry inspection, reboot, and a re-check that returns `FIXED`. Container and mocked tests are not a substitute, so remediation stays disabled.
+3. The Oracle Linux 7 UEKR6 fixed package is published in the `ol7_x86_64_UEKR6_ELS` channel and requires an active ELS subscription. The tool does not evaluate subscription state; it only reports the official EVR and channel.
+4. SUSE LTSS baselines require the corresponding subscription and repository entitlement. `kernel-default`, `kernel-default-base`, `kernel-azure`, `kernel-rt`, `kernel-64kb`, and `kernel-kvmsmall` are tracked separately; flavors without a record return `UNKNOWN`.
+5. The SUSE page for SLES 15 SP7 lists fixed packages while the product status table still says `In progress`. The tool treats this as `UNKNOWN`.
+6. AlmaLinux 8/9/10 fixed kernels exist only in the testing repository. The tool never enables `almalinux-testing` and never installs testing kernels.
+7. Amazon Linux kernel installation has not been performed on a real AWS instance. Its `dnf`/`yum` flow, post-reboot effect, and boot behavior are covered by mocked tests.
+8. Debian is supported on amd64 only. Remediation support for other distributions follows the support matrix.
+9. Container environments are not assessed and return `UNKNOWN`.
+10. Self-built or third-party kernels cannot be mapped to a distribution package and return `UNKNOWN`.
+11. Amazon Linux `kernel-livepatch` is out of scope; remediation means booting into the new kernel.
+12. On RPM-based and SUSE systems the tool does not rebuild the boot configuration. If a boot entry is missing it stops and prints the manual command.
+13. Distribution derivatives do not inherit conclusions. Rocky Linux, AlmaLinux, and Oracle Linux never use RHEL results, and RHCK never uses UEK results.
+14. Baseline updates are committed manually after checking official advisories. The tool does not fetch advisories at runtime.
 
 ## Troubleshooting
 
@@ -312,11 +351,11 @@ lib/
   kernel.sh                 Running kernel to package mapping
   package_manager.sh        apt, dnf, yum abstraction
   install.sh                Plan output, installation, post-install verification, reboot notice
-  status.sh                 Six-state machine
+  status.sh                 Seven-state machine
   report.sh                 --list-distros and --report
 adapters/                   11 distribution adapters declaring identity, release range, and capabilities
 data/cve-2026-98432.yml     Verified official remediation baseline
-tests/                      5 test suites, mocks, and the container smoke script
+tests/                      8 test suites, mocks, and the container smoke script
 ```
 
 ## License
