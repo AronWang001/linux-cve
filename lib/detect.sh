@@ -70,7 +70,7 @@ adapter_file_for_id() {
         ol) printf 'oracle_linux.sh\n' ;;
         amzn) printf 'amazon_linux.sh\n' ;;
         fedora) printf 'fedora.sh\n' ;;
-        opensuse-leap | opensuse-tumbleweed | opensuse | sles | sled) printf 'suse.sh\n' ;;
+        opensuse-leap | opensuse-tumbleweed | opensuse | sles | sled | sl-micro | sle-micro) printf 'suse.sh\n' ;;
         arch | archarm) printf 'arch.sh\n' ;;
         alpine) printf 'alpine.sh\n' ;;
         *) return 1 ;;
@@ -84,7 +84,7 @@ normalize_release() {
         debian | amazon | fedora)
             printf '%s\n' "${version%%.*}"
             ;;
-        rhel | rocky | almalinux | oracle)
+        rhel | rocky | almalinux | oracle | ol)
             printf '%s\n' "${version%%.*}"
             ;;
         ubuntu)
@@ -149,19 +149,55 @@ identify_distro() {
 distro_extra_detect() {
     KERNEL_FLAVOR=""
     ORACLE_KERNEL_TYPE=""
+    ORACLE_UEK_GEN=""
+    SUSE_PRODUCT=""
+    PRODUCT_KEY=""
 
     case "${DISTRO_ID}" in
         oracle)
+            PRODUCT_KEY="oracle-linux"
             # UEK 与 RHCK 使用完全不同的包与基线，必须分开判断
             if [[ ${KERNEL_RELEASE} == *uek* ]]; then
                 ORACLE_KERNEL_TYPE="uek"
                 KERNEL_FLAVOR="kernel-uek"
+                # UEK 代际由运行内核版本决定，不能按发行版版本推断：
+                # OL8 同时存在 UEKR6 与 UEKR7，OL9 同时存在 UEKR7 与 UEKR8。
+                case "${KERNEL_BRANCH}" in
+                    5.4) ORACLE_UEK_GEN="uek6" ;;
+                    5.15) ORACLE_UEK_GEN="uek7" ;;
+                    6.12) ORACLE_UEK_GEN="uek8" ;;
+                    *) ORACLE_UEK_GEN="unknown" ;;
+                esac
             else
                 ORACLE_KERNEL_TYPE="rhck"
                 KERNEL_FLAVOR="kernel"
             fi
             ;;
-        amazon | rhel | rocky | almalinux | fedora)
+        suse)
+            case "${OS_ID}" in
+                opensuse-leap) SUSE_PRODUCT="opensuse-leap" ;;
+                opensuse-tumbleweed) SUSE_PRODUCT="opensuse-tumbleweed" ;;
+                sles) SUSE_PRODUCT="sles" ;;
+                sled) SUSE_PRODUCT="sled" ;;
+                sl-micro | sle-micro | opensuse-micro) SUSE_PRODUCT="sle-micro" ;;
+                *) SUSE_PRODUCT="${OS_ID}" ;;
+            esac
+            # SUSE 的 flavor 由运行内核后缀决定，不能按产品猜测
+            case "${KERNEL_RELEASE}" in
+                *-default) KERNEL_FLAVOR="kernel-default" ;;
+                *-azure) KERNEL_FLAVOR="kernel-azure" ;;
+                *-rt) KERNEL_FLAVOR="kernel-rt" ;;
+                *-64kb) KERNEL_FLAVOR="kernel-64kb" ;;
+                *-kvmsmall) KERNEL_FLAVOR="kernel-kvmsmall" ;;
+                *) KERNEL_FLAVOR="" ;;
+            esac
+            PRODUCT_KEY="${SUSE_PRODUCT}"
+            ;;
+        almalinux)
+            KERNEL_FLAVOR="kernel"
+            PRODUCT_KEY="almalinux"
+            ;;
+        amazon | rhel | rocky | fedora)
             KERNEL_FLAVOR="kernel"
             ;;
         alpine)

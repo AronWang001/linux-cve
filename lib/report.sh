@@ -24,6 +24,7 @@ pad_cjk() {
 status_label() {
     case "$1" in
         fixed) printf '官方已修复' ;;
+        testing) printf '仅测试仓库' ;;
         patch_not_released) printf '官方未修复' ;;
         *) printf '无法确认' ;;
     esac
@@ -108,6 +109,7 @@ write_report() {
         printf '运行内核      : %s\n' "${KERNEL_RELEASE}"
         printf '内核分支      : %s\n' "${KERNEL_BRANCH}"
         printf '内核 flavor   : %s\n' "${KERNEL_FLAVOR:-未知}"
+        printf '内核流        : %s\n' "${BASELINE_STREAM:-未知}"
         printf '对应软件包    : %s\n' "${RUNNING_PKG:-未知}"
         printf '软件包版本    : %s\n' "${RUNNING_VERSION:-未知}"
         printf '待重启标记    : %s\n' "$([[ ${REBOOT_FLAG} -eq 1 ]] && printf '存在' || printf '不存在')"
@@ -117,6 +119,10 @@ write_report() {
         printf '说明          : %s\n' "${STATUS_REASON}"
         printf '自动修复      : %s\n' "$([[ ${AUTOFIX} -eq 1 ]] && printf '可用' || printf '不可用（仅检测）')"
         printf '修复版本基准  : %s\n' "${FIXED_VERSION:-未知}"
+        printf '仓库渠道      : %s\n' "${BASELINE_CHANNEL:-未知}"
+        printf '更新方式      : %s\n' "${BASELINE_PROCEDURE:-常规包管理器升级}"
+        printf '实机验证      : 安装 %s / 重启 %s\n' \
+            "${BASELINE_TESTED_INSTALL:-未记录}" "${BASELINE_TESTED_REBOOT:-未记录}"
         printf '\n'
         printf '[备注]\n'
         printf '%s\n' "${BASELINE_NOTE:-无}"

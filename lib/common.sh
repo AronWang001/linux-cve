@@ -14,6 +14,7 @@ readonly EX_PENDING_REBOOT=3
 readonly EX_UNKNOWN=4
 readonly EX_CANCELLED=5
 readonly EX_PATCH_NOT_RELEASED=6
+readonly EX_PATCH_TESTING_ONLY=7
 
 # 统一状态机（全局唯一的状态取值），由 fix.sh 与 lib/status.sh 共用
 # shellcheck disable=SC2034
@@ -21,6 +22,7 @@ readonly ST_FIXED="FIXED"
 readonly ST_PENDING="PENDING_REBOOT"
 readonly ST_VULN_FIXABLE="VULNERABLE_PATCH_AVAILABLE"
 readonly ST_NOT_RELEASED="PATCH_NOT_RELEASED"
+readonly ST_TESTING="PATCH_TESTING_ONLY"
 readonly ST_UNKNOWN="UNKNOWN"
 readonly ST_UNSUPPORTED="UNSUPPORTED"
 

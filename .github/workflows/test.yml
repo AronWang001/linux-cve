@@ -30,8 +30,9 @@ jobs:
 
       - name: 检查全部脚本
         run: |
-          shellcheck -S style \
+          shellcheck -S style -x \
             fix.sh \
+            install.sh \
             lib/*.sh \
             adapters/*.sh \
             tests/*.sh \
@@ -71,6 +72,15 @@ jobs:
 
       - name: 安全边界
         run: bash tests/test_safety.sh
+
+      - name: Oracle Linux / SUSE / AlmaLinux 基线
+        run: bash tests/test_new_distros.sh
+
+      - name: 基线文件静态检查
+        run: bash tests/test_baseline.sh
+
+      - name: 安装器整包校验
+        run: bash tests/test_installer.sh
 
   distro-smoke:
     name: 真实发行版识别（${{ matrix.name }}）

@@ -73,6 +73,25 @@ candidate_usable_rpm() {
     version_ge_family "rpm" "${cand}" "${FIXED_VERSION}"
 }
 
+# SUSE：zypper info 只读查询候选版本（不刷新索引、不安装）
+suse_candidate() {
+    local pkg="$1" out=""
+    have zypper || return 1
+    out="$(LC_ALL=C zypper --non-interactive --quiet info --type package "${pkg}" 2>/dev/null |
+        awk -F': *' '/^Version[[:space:]]*:/ {print $2; exit}' || true)"
+    [[ -n ${out} ]] || return 1
+    printf '%s\n' "${out}"
+}
+
+# SUSE 候选：同分支且不低于基线 EVR
+candidate_usable_suse() {
+    local cand="$1" cand_branch=""
+    [[ -n ${cand} ]] || return 1
+    cand_branch="$(kernel_branch "${cand}" || true)"
+    [[ ${cand_branch} == "${KERNEL_BRANCH}" ]] || return 1
+    version_ge_family "rpm" "${cand}" "${FIXED_VERSION}"
+}
+
 pm_name() {
     case "${DISTRO_FAMILY}" in
         debian) printf 'apt\n' ;;
@@ -110,6 +129,13 @@ pm_update_index() {
                     log_err "yum makecache 执行失败，已停止，未安装任何内核。"
                     return 1
                 fi
+            fi
+            ;;
+        suse)
+            log_info "执行 zypper refresh ..."
+            if ! zypper --non-interactive --quiet refresh; then
+                log_err "zypper refresh 执行失败，已停止，未安装任何内核。"
+                return 1
             fi
             ;;
         *)
@@ -155,6 +181,16 @@ pm_install() {
                 fi
             fi
             ;;
+        suse)
+            local spec="${pkg}=${evr}"
+            log_info "执行 zypper install ${spec} ..."
+            # 只安装指定版本的内核包，不使用 zypper update/dup，避免全系统升级
+            if ! zypper --non-interactive --no-recommends install --oldpackage "${spec}"; then
+                log_err "内核安装失败（zypper 返回非零），已停止后续操作。"
+                log_err "系统未重启，当前仍运行 ${KERNEL_RELEASE}。请根据上方 zypper 报错处理后重试。"
+                return 1
+            fi
+            ;;
         *)
             log_err "该发行版未启用自动修复，拒绝执行安装。"
             return 1
@@ -177,6 +213,16 @@ pm_plan_lines() {
             ;;
         rpm)
             printf '  - %s-%s\n' "${pkg}" "${evr}"
+            ;;
+        suse)
+            printf '  - %s=%s\n' "${pkg}" "${evr}"
+            # dry-run 只读：让 zypper 计算事务，列出将变更的包，不写入系统
+            if have zypper; then
+                printf '  zypper 事务预览（--dry-run）：\n'
+                LC_ALL=C zypper --non-interactive --quiet --dry-run \
+                    install --no-recommends --oldpackage "${pkg}=${evr}" 2>&1 |
+                    sed 's/^/    /' || true
+            fi
             ;;
         *)
             ;;
