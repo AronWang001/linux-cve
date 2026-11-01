@@ -24,10 +24,10 @@
 
 set -Eeuo pipefail
 
-readonly SCRIPT_VERSION="1.1.0"
+readonly SCRIPT_VERSION="1.1.1"
 readonly SCRIPT_NAME="${0##*/}"
 readonly CVE_ID="CVE-2026-98432"
-readonly PROJECT_URL="https://github.com/AronWang001/debian-cve-2026-98432-fix"
+readonly PROJECT_URL="https://github.com/AronWang001/linux-cve-2026-98432-fix"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 LIB_ROOT="${SCRIPT_DIR}"

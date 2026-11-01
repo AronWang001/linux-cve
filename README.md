@@ -1,12 +1,14 @@
 # CVE-2026-98432 多发行版检测与修复工具
 
-[![test](https://github.com/AronWang001/debian-cve-2026-98432-fix/actions/workflows/test.yml/badge.svg)](https://github.com/AronWang001/debian-cve-2026-98432-fix/actions/workflows/test.yml)
+[![test](https://github.com/AronWang001/linux-cve-2026-98432-fix/actions/workflows/test.yml/badge.svg)](https://github.com/AronWang001/linux-cve-2026-98432-fix/actions/workflows/test.yml)
 
 检测当前 Linux 发行版的**运行内核**是否受 CVE-2026-98432 影响，并仅在「官方修复包已核验 + 适配完成 + 用户确认」的发行版上执行内核更新。
 
 > **English overview**: A Bash tool that maps the running kernel to its distribution package, checks CVE-2026-98432 against a manually verified advisory baseline, and installs the official kernel update only on distributions where the fixed package, repository channel, package manager flow and tests have all been verified. Everything else is detect-only and fails closed. Debian 12/13 and Amazon Linux 2/2023 support automatic remediation; Ubuntu and RHEL are detect-only because no fixed package has been published; Rocky, AlmaLinux, Oracle Linux, Fedora, SUSE, Arch and Alpine are detected but not enabled for automatic remediation. No reboot is ever performed automatically.
 
 > **v1.1.0 的重要变化**：从「仅 Debian」扩展为多发行版。**能识别一个系统不等于支持自动修复** —— 请以本文的支持矩阵为准。
+
+> **仓库已更名（v1.1.1）**：`debian-cve-2026-98432-fix` → `linux-cve-2026-98432-fix`。v1.1.0 起已覆盖 Debian 之外的多套发行版，原名中的 `debian-` 前缀不再准确。GitHub 会对旧地址做 301 跳转，但请把书签、CI 配置、脚本里的地址换成新仓库；v1.1.0 的 Tag / Release 未改动，仍可追溯。
 
 ---
 
@@ -159,12 +161,12 @@
 > **v1.1.0 起入口仍是 `fix.sh`，但它会加载同目录下的 `lib/`、`adapters/`、`data/`。**
 > 因此**不能只下载单个 `fix.sh`**，请使用下面的引导安装器或整包克隆。
 
-### 方式一：引导安装器（固定 v1.1.0 Tag，推荐）
+### 方式一：引导安装器（固定 v1.1.1 Tag，推荐）
 
 引导脚本会下载该 Tag 的完整包到临时目录、校验 `fix.sh` 的 SHA256，然后以相同参数调用 `fix.sh`：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/debian-cve-2026-98432-fix/v1.1.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.1/install.sh -o install.sh
 less install.sh                       # 先审查
 sudo bash install.sh --check          # 只读体检
 sudo bash install.sh                  # 交互式修复（仅白名单发行版）
@@ -173,14 +175,14 @@ sudo bash install.sh                  # 交互式修复（仅白名单发行版�
 不落地执行（下载失败时不会执行任何内容）：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/AronWang001/debian-cve-2026-98432-fix/v1.1.0/install.sh) --check
+bash <(curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.1/install.sh) --check
 ```
 
 ### 方式二：整包克隆后本地执行
 
 ```bash
-git clone --branch v1.1.0 --depth 1 https://github.com/AronWang001/debian-cve-2026-98432-fix.git
-cd debian-cve-2026-98432-fix
+git clone --branch v1.1.1 --depth 1 https://github.com/AronWang001/linux-cve-2026-98432-fix.git
+cd linux-cve-2026-98432-fix
 sudo bash fix.sh --check              # 只读体检
 sudo bash fix.sh                      # 交互式修复（仅白名单发行版）
 ```
@@ -190,11 +192,11 @@ sudo bash fix.sh                      # 交互式修复（仅白名单发行版�
 Release 页面提供 `SHA256SUMS`：
 
 ```bash
-curl -fsSLO https://github.com/AronWang001/debian-cve-2026-98432-fix/releases/download/v1.1.0/SHA256SUMS
+curl -fsSLO https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v1.1.1/SHA256SUMS
 sha256sum -c SHA256SUMS
 ```
 
-> 请固定在 `v1.1.0` Tag 上执行。不要直接使用 `main` 分支的原始文件：`main` 可能包含尚未发布的改动。
+> 请固定在 `v1.1.1` Tag 上执行。不要直接使用 `main` 分支的原始文件：`main` 可能包含尚未发布的改动。
 > 下载失败时 `&&` 会短路，不会执行空脚本；执行前请先阅读脚本内容。
 
 ### 参数

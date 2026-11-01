@@ -535,7 +535,7 @@ assert_has "退出码"
 
 run_fix --version
 assert_rc 0
-assert_has "1.1.0"
+assert_has "1.1.1"
 
 run_fix --bogus
 assert_rc 1

@@ -6,19 +6,20 @@
 #       以同样的参数调用 fix.sh。本文件不含任何系统修改逻辑。
 #
 # 用法：
-#   curl -fsSL https://raw.githubusercontent.com/AronWang001/debian-cve-2026-98432-fix/v1.1.0/install.sh -o install.sh
+#   curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.1/install.sh -o install.sh
 #   sudo bash install.sh --check
 #
 # 不落地执行（下载失败时不会执行任何内容）：
-#   bash <(curl -fsSL https://raw.githubusercontent.com/AronWang001/debian-cve-2026-98432-fix/v1.1.0/install.sh) --check
+#   bash <(curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.1/install.sh) --check
 #
 # License: MIT
 
 set -Eeuo pipefail
 
-readonly REPO="AronWang001/debian-cve-2026-98432-fix"
-readonly VERSION="1.1.0"
+readonly REPO="AronWang001/linux-cve-2026-98432-fix"
+readonly VERSION="1.1.1"
 readonly TAG="v${VERSION}"
+readonly SRC_NAME="${REPO##*/}"   # GitHub 归档解压后的目录名前缀
 readonly TARBALL="https://github.com/${REPO}/archive/refs/tags/${TAG}.tar.gz"
 readonly SUMS="https://github.com/${REPO}/releases/download/${TAG}/SHA256SUMS"
 
@@ -46,10 +47,10 @@ curl -fsSL --retry 3 --connect-timeout 15 -o "${TMPDIR_RUN}/src.tar.gz" "${TARBA
 tar -xzf "${TMPDIR_RUN}/src.tar.gz" -C "${TMPDIR_RUN}" ||
     die "解压工具包失败，未执行任何操作。"
 
-SRC_DIR="${TMPDIR_RUN}/debian-cve-2026-98432-fix-${VERSION}"
+SRC_DIR="${TMPDIR_RUN}/${SRC_NAME}-${VERSION}"
 if [[ ! -r "${SRC_DIR}/fix.sh" ]]; then
     # GitHub 归档目录名可能因 Tag 前缀不同而变化，这里回退到目录探测
-    SRC_DIR="$(find "${TMPDIR_RUN}" -maxdepth 1 -mindepth 1 -type d -name 'debian-cve-2026-98432-fix-*' 2>/dev/null | head -n 1)"
+    SRC_DIR="$(find "${TMPDIR_RUN}" -maxdepth 1 -mindepth 1 -type d -name "${SRC_NAME}-*" 2>/dev/null | head -n 1)"
 fi
 [[ -n ${SRC_DIR} ]] && [[ -r "${SRC_DIR}/fix.sh" ]] || die "工具包结构异常（缺少 fix.sh），未执行任何操作。"
 
