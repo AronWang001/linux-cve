@@ -33,8 +33,9 @@
 
 - `lib/advisory.sh`：新增 `baseline_lookup_exact()`，按产品、版本、内核分支、软件包、架构、内核流严格匹配；多条记录冲突或无记录时返回 `UNKNOWN`，不再让通配记录兜底命中。
 - `lib/kernel.sh`：RPM/SUSE 的运行内核映射同时接受 `EVR`、`EVR.arch`、`EVR-flavor` 三种形式；补充 `kernel-64kb`、`kernel-azure`、`kernel-uek64k` 等内核包识别。
-- `fix.sh`：`SCRIPT_VERSION` 更新为 `1.2.0`；新增 `PATCH_TESTING_ONLY` 的退出码与提示；`--check` 支持 SUSE 目标包预览。
+- `fix.sh`：`SCRIPT_VERSION` 更新为 `1.2.0`；新增 `PATCH_TESTING_ONLY` 的退出码与提示；`--check` 支持 SUSE 目标包预览。只检测的发行版不再输出「可执行以下命令修复」，避免与「未启用自动修复」自相矛盾。
 - `--list-distros`：自动修复列按基线中的 `autofix` 汇总；有修复包但未完成实机验证的发行版显示「仅检测」，不再因为一条 fixed 记录就宣称整个家族可自动修复。
+- 状态输出与 `--report` 新增「内核流」「仓库渠道」「更新方式」「实机验证」四行，SUSE Micro 会明确显示 `transactional-update`。
 
 ### 已知限制
 

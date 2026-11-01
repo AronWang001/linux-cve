@@ -279,7 +279,7 @@ Debian 12 的 `6.12.113-1~deb12u1` 是回移版本，不与 Debian 13 的 `6.12.
 | 套件 | 用例数 | 覆盖内容 |
 | --- | --- | --- |
 | `tests/test.sh` | 26 | Debian 回归：环境识别、状态判定、包索引刷新与安装失败、initramfs 与引导失败、`--check`、用户取消、完整安装、回移分支、版本比较、静态检查 |
-| `tests/test_detection.sh` | 16 | Ubuntu 20.04/22.04/24.04、RHEL 8/9/10、Rocky 与 AlmaLinux 区分、Oracle UEK 与 RHCK 区分、AL2 与 AL2023 区分、Fedora/SUSE/Arch/Alpine 识别、x86_64 与 aarch64、架构拒绝、未修复不安装、公告不可达、缺少基线、容器环境、空 APT 索引不中断、`--list-distros` 与 `--report` |
+| `tests/test_detection.sh` | 16 | Ubuntu 20.04/22.04/24.04、RHEL 8/9/10、Rocky 与 AlmaLinux 区分（AlmaLinux 为仅测试仓库）、Oracle UEK 与 RHCK 区分、AL2 与 AL2023 区分、Fedora/SUSE/Arch/Alpine 识别、x86_64 与 aarch64、架构拒绝、未修复不安装、官方状态矛盾时 UNKNOWN、缺少基线、容器环境、空 APT 索引不中断、`--list-distros` 与 `--report` |
 | `tests/test_amazon_linux.sh` | 11 | AL2 4.14/5.10/5.15 与 AL2023 6.1/6.12/6.18 的独立基线、完整安装、dnf 失败、initramfs 缺失、用户取消 |
 | `tests/test_version.sh` | 5 | RPM EVR（epoch、release、`~`）、apk 修订号与后缀、pacman、dpkg 回移版本、未知版本家族 |
 | `tests/test_safety.sh` | 8 | 非白名单发行版指定 `--yes` 也不安装、`--check` 只读、`--report` 无副作用、适配层能力声明完整、白名单最小化、静态扫描 |

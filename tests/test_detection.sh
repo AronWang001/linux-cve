@@ -162,8 +162,11 @@ EOF
 h_install_rpm kernel 5.14.0-427.13.1.el9_4
 h_set_kernel 5.14.0-427.13.1.el9_4.x86_64
 h_run --check
-assert_rc 4
+# v1.2.0 起 AlmaLinux 8/9/10 的修复内核只在 testing 仓库，
+# 判定为 PATCH_TESTING_ONLY（退出码 7），仍然不允许自动安装。
+assert_rc 7
 assert_has "AlmaLinux 9.4"
+assert_has "判定结果：仅测试仓库有补丁"
 assert_lacks "Rocky Linux"
 if grep -Fq "Rocky Linux" <<<"${ROCKY_OUT}"; then
     :
@@ -184,9 +187,14 @@ EOF
 h_install_rpm kernel-uek 5.15.0-200.131.27.el9uek
 h_set_kernel 5.15.0-200.131.27.el9uek.x86_64
 h_run --check
-assert_rc 4
+# v1.2.0 起 OL9 的 UEKR7 有 ELSA-2026-500398 基线：能给出修复版本，
+# 但未完成实机验证，仍然只检测、不安装。
+assert_rc 2
 assert_has "kernel-uek"
 assert_has "Oracle Linux Server 9.4"
+assert_has "ELSA-2026-500398"
+assert_has "未启用自动修复"
+assert_no_file "${SCEN}/state/calls/dnf_install"
 
 h_scenario oracle-rhck
 h_os_release <<'EOF'
@@ -286,8 +294,11 @@ EOF
 h_install_rpm kernel-default 5.14.21-150500.55.68
 h_set_kernel 5.14.21-150500.55.68-default
 h_run --check
-assert_rc 4
+# SLES 15 SP5 的修复包只在 LTSS 渠道：能给出 EVR 与频道，但不启用自动修复。
+assert_rc 2
 assert_has "SUSE Linux Enterprise Server 15 SP5"
+assert_has "SUSE-SLE-Product-SLES-15-SP5-LTSS"
+assert_has "未启用自动修复"
 assert_lacks "openSUSE Leap"
 
 h_scenario arch
@@ -387,16 +398,18 @@ assert_no_file "${SCEN}/state/calls/apt_update"
 assert_no_file "${SCEN}/state/calls/reboot"
 end_case
 
-begin_case "D12. 公告不可访问时进入 UNKNOWN，绝不误报安全"
-h_scenario suse-unknown
+begin_case "D12. 官方状态自相矛盾时进入 UNKNOWN，绝不误报安全"
+# v1.2.0 起不再联网抓取公告，改为人工核验的离线基线；「无法核验」的场景
+# 由 SLES 15 SP7 代表：发布包列表与状态表互相矛盾，按 UNKNOWN fail closed。
+h_scenario sles157-conflict
 h_os_release <<'EOF'
-PRETTY_NAME="SUSE Linux Enterprise Server 15 SP5"
+PRETTY_NAME="SUSE Linux Enterprise Server 15 SP7"
 NAME="SLES"
-VERSION_ID="15.5"
+VERSION_ID="15.7"
 ID="sles"
 EOF
-h_install_rpm kernel-default 5.14.21-150500.55.68
-h_set_kernel 5.14.21-150500.55.68-default
+h_install_rpm kernel-default 6.4.0-150700.40.1
+h_set_kernel 6.4.0-150700.40.1-default
 h_run --check
 assert_rc 4
 assert_has "判定结果：无法确认"

@@ -279,7 +279,7 @@ Before you run it:
 | Suite | Cases | Coverage |
 | --- | --- | --- |
 | `tests/test.sh` | 26 | Debian regression: environment detection, status assessment, index refresh and install failures, initramfs and bootloader failures, `--check`, operator cancellation, full installation, backport branch, version comparison, static checks |
-| `tests/test_detection.sh` | 16 | Ubuntu 20.04/22.04/24.04, RHEL 8/9/10, Rocky vs AlmaLinux, Oracle UEK vs RHCK, AL2 vs AL2023, Fedora/SUSE/Arch/Alpine identification, x86_64 and aarch64, architecture rejection, no install when no fix exists, unreachable advisory, missing baseline, container environment, empty APT index, `--list-distros` and `--report` |
+| `tests/test_detection.sh` | 16 | Ubuntu 20.04/22.04/24.04, RHEL 8/9/10, Rocky vs AlmaLinux (testing-only), Oracle UEK vs RHCK, AL2 vs AL2023, Fedora/SUSE/Arch/Alpine identification, x86_64 and aarch64, architecture rejection, no install when no fix exists, UNKNOWN on contradictory advisory status, missing baseline, container environment, empty APT index, `--list-distros` and `--report` |
 | `tests/test_amazon_linux.sh` | 11 | Independent baselines for AL2 4.14/5.10/5.15 and AL2023 6.1/6.12/6.18, full installation, dnf failure, missing initramfs, operator cancellation |
 | `tests/test_version.sh` | 5 | RPM EVR (epoch, release, `~`), apk revision and suffixes, pacman, dpkg backport versions, unknown version families |
 | `tests/test_safety.sh` | 8 | No installation on non-allowlisted distributions even with `--yes`, `--check` is read-only, `--report` has no side effects, adapter capability declarations are complete, allowlist minimality, static scan |
