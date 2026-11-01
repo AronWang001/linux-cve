@@ -2,6 +2,51 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.2.0] - 2026-11-01
+
+新增 Oracle Linux UEK、SUSE/openSUSE、AlmaLinux 的官方补丁基线，基线模型改为按产品/版本/内核流/flavor/架构/仓库渠道精确匹配。安装器改为整包 SHA256 校验。
+
+**自动修复能力未扩大**：新纳入的发行版只做检测与状态展示。真实虚拟机上的安装、引导项检查与重启验证尚未完成，因此 `autofix` 全部为 `no`，避免把未验证的安装流程交付给生产环境。
+
+### 新增
+
+- Oracle Linux UEK：按 2026-10-16 的三个勘误建立 7 条基线。
+  - `ELSA-2026-500397`：UEKR6 `5.4.17-2136.360.3.1`（`el7uek` / `el8uek`）
+  - `ELSA-2026-500398`：UEKR7 `5.15.0-325.221.6.4`（`el8uek` / `el9uek`）
+  - `ELSA-2026-500399`：UEKR8 `6.12.0-207.111.5.4`（`el9uek` / `el10uek`）
+  - UEK 代际由运行内核分支判定（5.4 / 5.15 / 6.12），OL8 与 OL9 的不同代际分别匹配；OL7 只对应 x86_64 UEKR6 ELS 频道；RHCK 无独立勘误，保持 `UNKNOWN`。
+- SUSE / openSUSE：按 2026-10-29 的官方发布包列表建立基线。
+  - openSUSE Leap 16.0、SLES 16.0：`kernel-default >= 6.12.0-160000.40.1`
+  - SLES 15 SP4-LTSS：`5.14.21-150400.24.246.1`
+  - SLES 15 SP5-LTSS：`5.14.21-150500.55.195.1`
+  - SLES 15 SP6-LTSS：`6.4.0-150600.23.143.1`
+  - `kernel-default-base` 使用独立的完整 EVR（如 `6.12.0-160000.40.1.160000.2.30`），不与 `kernel-default` 共用。
+  - SLES 15 SP7 的发布包列表与状态表互相矛盾（状态仍为 `In progress`），按 `UNKNOWN` 处理。
+  - SLE Micro 6.2 有修复包，但使用 transactional-update，仅检测。
+- 新状态 `PATCH_TESTING_ONLY` 与退出码 `7`：AlmaLinux 8/9/10 的修复内核仅在 testing 仓库（2026-10-30 公告），工具不会启用 testing 源或安装测试内核。
+- `zypper` 只读能力：候选版本查询、事务 dry-run 预览、按 EVR 安装的实现，全部只在 `autofix=yes` 时可达；当前没有 SUSE 记录启用自动修复。
+- 基线字段：`product`、`service_pack`、`kernel_stream`、`kernel_flavor`、`repo_channel`、`advisory_status`、`tested_install`、`tested_reboot`。
+- 基线静态检查 `tests/test_baseline.sh`：ID 与组合键唯一、`fixed/testing` 必须有完整 EVR 与公告、通配记录不得声明已修复、`autofix=yes` 必须有正式补丁（新模型还要求实机安装与重启验证）。
+- 安装器整包校验：`install.sh` 现在要求 Release 提供 `SHA256SUMS`，校验 `fix.sh`、`install.sh`、`lib/*.sh`、`adapters/*.sh`、`data/*.yml` 的全部哈希；清单缺失、哈希不符、路径穿越、缺少 `sha256sum/shasum` 时一律停止，不再「警告后继续」。
+
+### 变更
+
+- `lib/advisory.sh`：新增 `baseline_lookup_exact()`，按产品、版本、内核分支、软件包、架构、内核流严格匹配；多条记录冲突或无记录时返回 `UNKNOWN`，不再让通配记录兜底命中。
+- `lib/kernel.sh`：RPM/SUSE 的运行内核映射同时接受 `EVR`、`EVR.arch`、`EVR-flavor` 三种形式；补充 `kernel-64kb`、`kernel-azure`、`kernel-uek64k` 等内核包识别。
+- `fix.sh`：`SCRIPT_VERSION` 更新为 `1.2.0`；新增 `PATCH_TESTING_ONLY` 的退出码与提示；`--check` 支持 SUSE 目标包预览。
+- `--list-distros`：自动修复列按基线中的 `autofix` 汇总；有修复包但未完成实机验证的发行版显示「仅检测」，不再因为一条 fixed 记录就宣称整个家族可自动修复。
+
+### 已知限制
+
+- Oracle Linux、SUSE/openSUSE、AlmaLinux 均未在真实虚拟机或云主机上完成「安装→引导项检查→重启→`FIXED`」验证，因此不启用自动修复。
+- SLES 的 LTSS 基线需要对应订阅与仓库资格；工具无法判断订阅状态，只展示官方 EVR。
+- AlmaLinux 的 testing 补丁未经社区验证，不得用于生产。
+
+### 升级说明
+
+- 从 v1.1.2 升级无需修改配置，判定流程与已有 Debian/Amazon Linux 行为不变。
+- 新增退出码 `7`，脚本化调用方需要按需处理。
+
 ## [1.1.2] - 2026-11-01
 
 安装方式改为一键执行，并按项目文档规范重写 README。判定逻辑、支持矩阵与基线数据均未变更。

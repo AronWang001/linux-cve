@@ -73,6 +73,20 @@ select_target_rpm() {
     return 0
 }
 
+# SUSE：目标包与完整 EVR 由基线给出，zypper 只查询候选，不做任何写入
+select_target_suse() {
+    local cand=""
+
+    TARGET_PKG="${BASELINE_PACKAGE:-kernel-default}"
+    if ! cand="$(suse_candidate "${TARGET_PKG}")"; then
+        return 1
+    fi
+    candidate_usable_suse "${cand}" || return 1
+    TARGET_VERSION="${cand}"
+    TARGET_RELEASE="${cand}"
+    return 0
+}
+
 # ---------------------------------------------------------------------------
 # 计划与确认
 # ---------------------------------------------------------------------------
@@ -130,6 +144,10 @@ print_plan() {
             printf '   1. %s makecache（仅刷新元数据）\n' "$(pm_name)"
             printf '   2. %s install %s-%s\n' "$(pm_name)" "${TARGET_PKG}" "${TARGET_VERSION}"
             ;;
+        suse)
+            printf '   1. zypper refresh（仅刷新元数据）\n'
+            printf '   2. zypper install %s=%s（不使用 update/dup）\n' "${TARGET_PKG}" "${TARGET_VERSION}"
+            ;;
         *)
             printf '   （该发行版未启用自动修复）\n'
             ;;
@@ -182,6 +200,7 @@ pm_query_hint() {
     case "${DISTRO_FAMILY}" in
         debian) printf 'dpkg -l | grep linux-image' ;;
         rpm) printf 'rpm -qa kernel\\*' ;;
+        suse) printf 'zypper se -si kernel-default' ;;
         alpine) printf 'apk info -v' ;;
         arch) printf 'pacman -Q' ;;
         *) printf '包管理器查询命令' ;;

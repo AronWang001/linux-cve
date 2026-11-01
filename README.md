@@ -6,7 +6,7 @@
 
 自动修复仅覆盖 Debian 12/13 与 Amazon Linux 2/2023。Ubuntu 与 Red Hat Enterprise Linux 只做检测，官方尚未发布可确认的修复包。其余发行版只做识别与信息输出，不进入安装流程。具体状态见[发行版支持矩阵](#发行版支持矩阵)。
 
-当前版本 v1.1.2，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本 v1.2.0，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 漏洞背景
 
@@ -17,7 +17,7 @@
 | 类型 | 释放后使用（use-after-free） |
 | 触发条件 | 并发处理重传的 TCP SYN，或启用 `tcp_migrate_req` 的请求套接字迁移时，`inet_opt` 与 `ireq_opt` 可能在 RCU 宽限期结束前被释放 |
 | 影响 | 内核内存破坏，可导致拒绝服务。具体影响范围与利用条件以各发行版公告为准 |
-| 上游修复 | `ipv4: free inet_opt and ireq_opt after an RCU grace period`（mainline 7.3-rc7） |
+| 上游修复 | `ipv4: free inet_opt and ireq_opt after an RCU grace period`，修复进入 7.2.10、6.18.56、6.12.113、6.1.190（commit `26d4c36d318c`） |
 | 公开时间 | 2026-10-15 |
 
 各发行版是否受影响、修复版本是多少，以该发行版的官方公告为准。本工具不依据其他发行版的结论推导，也不根据上游版本号推断发行版修复状态，不评估 CVSS 分数与实际攻击复杂度。
@@ -44,17 +44,17 @@
 ### 一键执行
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.2/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh | sudo bash
 ```
 
-`install.sh` 是引导安装器，本身不修改系统：它把对应 Tag 的源码归档下载到临时目录，解包后校验 `fix.sh` 的哈希，然后以相同参数执行 `fix.sh`。检测完成后显示修复计划，输入 `Y` 确认才安装内核。确认提示从 `/dev/tty` 读取，管道执行也能正常交互；`sudo` 可能要求输入密码。
+`install.sh` 是引导安装器，本身不修改系统：它把对应 Tag 的源码归档下载到临时目录，解包后从 Release 读取 `SHA256SUMS`，逐个校验 `fix.sh`、`install.sh`、`lib/*.sh`、`adapters/*.sh` 与 `data/*.yml`，全部通过后才以相同参数执行 `fix.sh`。检测完成后显示修复计划，输入 `Y` 确认才安装内核。确认提示从 `/dev/tty` 读取，管道执行也能正常交互；`sudo` 可能要求输入密码。
 
-校验范围有限：只比对 Release 中 `SHA256SUMS` 记录的 `fix.sh` 哈希，归档包整体以及 `lib/`、`adapters/`、`data/` 等文件不逐一校验。`SHA256SUMS` 无法获取时跳过校验并给出警告；系统缺少 `sha256sum` 与 `shasum` 时同样跳过；哈希不一致时直接中止，不执行任何系统操作。正式环境使用前建议先下载脚本自行审查。
+校验按 fail closed 处理：`SHA256SUMS` 缺失或为空、清单未覆盖全部脚本、任一文件哈希不一致、归档包含绝对路径或 `..`、系统缺少 `sha256sum` 与 `shasum`，都会在解包后或执行前终止，不会运行任何工具代码。`SHA256SUMS` 与源码包来自同一仓库，不具备独立数字签名，不能等同于签名验证。正式环境使用前仍建议先下载脚本自行审查。
 
 ### 只读检查
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.2/install.sh | sudo bash -s -- --check
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh | sudo bash -s -- --check
 ```
 
 只读取系统状态，不刷新包索引、不安装软件包、不修改配置。`--check` 约束的是检测与修复阶段，不影响 `install.sh` 自身的下载行为。本地包索引为空时，候选版本会显示为未知，需要先自行执行 `apt-get update` 或 `dnf makecache`。
@@ -62,7 +62,7 @@ curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fi
 ### 免交互执行
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.2/install.sh | sudo bash -s -- --yes
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh | sudo bash -s -- --yes
 ```
 
 `--yes` 只跳过确认提示，不跳过发行版白名单、公告核验与版本校验。非白名单发行版即使指定 `--yes` 也不会进入安装流程。
@@ -70,7 +70,7 @@ curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fi
 ### 下载后审查再执行
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.2/install.sh
+curl -fsSLO https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh
 less install.sh
 sudo bash install.sh --check
 sudo bash install.sh
@@ -81,7 +81,7 @@ sudo bash install.sh
 `fix.sh` 依赖同目录的 `lib/`、`adapters/` 与 `data/`，不能单独下载使用：
 
 ```bash
-git clone --branch v1.1.2 --depth 1 https://github.com/AronWang001/linux-cve-2026-98432-fix.git
+git clone --branch v1.2.0 --depth 1 https://github.com/AronWang001/linux-cve-2026-98432-fix.git
 cd linux-cve-2026-98432-fix
 sudo bash fix.sh --check
 sudo bash fix.sh
@@ -89,18 +89,19 @@ sudo bash fix.sh
 
 ### 校验发布包
 
-`SHA256SUMS` 同时记录 `fix.sh` 与 `install.sh`，两个文件都要放在同一目录才能完成校验：
+`SHA256SUMS` 覆盖 `fix.sh`、`install.sh`、`lib/`、`adapters/` 与 `data/` 中的全部脚本和数据文件，需要与源码归档一起校验：
 
 ```bash
 mkdir -p /tmp/cve-verify && cd /tmp/cve-verify
-base=https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v1.1.2
+base=https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v1.2.0
 curl -fsSLO "${base}/SHA256SUMS"
-curl -fsSLO "${base}/install.sh"
-curl -fsSLO "${base}/fix.sh"
-sha256sum -c SHA256SUMS
+curl -fsSL -o src.tar.gz https://github.com/AronWang001/linux-cve-2026-98432-fix/archive/refs/tags/v1.2.0.tar.gz
+tar -xzf src.tar.gz
+cd linux-cve-2026-98432-fix-1.2.0
+sha256sum -c ../SHA256SUMS
 ```
 
-正常输出为 `fix.sh: OK` 与 `install.sh: OK`。系统没有 `sha256sum` 时可用 `shasum -a 256 -c SHA256SUMS`。
+每条记录都应输出 `OK`。归档目录名随仓库名变化，解压后目录不同时以实际目录为准。系统没有 `sha256sum` 时可用 `shasum -a 256 -c ../SHA256SUMS`。
 
 ## 参数与退出码
 
@@ -124,6 +125,7 @@ sha256sum -c SHA256SUMS
 | `PENDING_REBOOT` | 修复内核已安装，但仍运行旧内核 | 3 |
 | `VULNERABLE_PATCH_AVAILABLE` | 官方修复包可用，运行内核仍受影响 | 2 |
 | `PATCH_NOT_RELEASED` | 官方尚未发布可确认的修复包，只输出状态，不安装 | 6 |
+| `PATCH_TESTING_ONLY` | 官方仅在 testing 仓库提供修复包，生产仓库未发布，不安装 | 7 |
 | `UNKNOWN` | 公告、内核来源、包映射或版本无法确认 | 4 |
 | `UNSUPPORTED` | 系统、版本、架构或内核 flavor 不受支持 | 1 |
 | 用户取消 | 确认阶段输入非 `y`，系统未做修改 | 5 |
@@ -162,6 +164,37 @@ sudo reboot
 
 Debian 12 的 `6.12.113-1~deb12u1` 是回移版本，不与 Debian 13 的 `6.12.113-1` 混用。Amazon Linux 2 的四个分支包名都是 `kernel`，按完整 EVR 区分；Amazon Linux 2023 的 6.12 与 6.18 是独立包 `kernel6.12`、`kernel6.18`，基线互不通用。
 
+### 已发布修复包、当前仅检测
+
+以下发行版的官方修复包已发布，工具能给出精确的修复版本与仓库渠道，但尚未在真实虚拟机完成安装与重启验证，因此不启用自动修复。
+
+| 发行版 | 内核分支 | 内核包 | 官方修复版本 | 官方公告 / 补丁 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| Oracle Linux 8 (UEKR7) | 5.15 | `kernel-uek` | `5.15.0-325.221.6.4.el8uek` | [ELSA-2026-500398](https://linux.oracle.com/errata/ELSA-2026-500398.html) | 仅检测 |
+| Oracle Linux 9 (UEKR7) | 5.15 | `kernel-uek` | `5.15.0-325.221.6.4.el9uek` | [ELSA-2026-500398](https://linux.oracle.com/errata/ELSA-2026-500398.html) | 仅检测 |
+| Oracle Linux 8 (UEKR6) | 5.4 | `kernel-uek` | `5.4.17-2136.360.3.1.el8uek` | [ELSA-2026-500397](https://linux.oracle.com/errata/ELSA-2026-500397.html) | 仅检测 |
+| Oracle Linux 7 (UEKR6) | 5.4 | `kernel-uek` | `5.4.17-2136.360.3.1.el7uek` | [ELSA-2026-500397](https://linux.oracle.com/errata/ELSA-2026-500397.html) | 仅检测，需 ELS 订阅 |
+| Oracle Linux 9 (UEKR8) | 6.12 | `kernel-uek` | `6.12.0-207.111.5.4.el9uek` | [ELSA-2026-500399](https://linux.oracle.com/errata/ELSA-2026-500399.html) | 仅检测 |
+| Oracle Linux 10 (UEKR8) | 6.12 | `kernel-uek` | `6.12.0-207.111.5.4.el10uek` | [ELSA-2026-500399](https://linux.oracle.com/errata/ELSA-2026-500399.html) | 仅检测 |
+| openSUSE Leap 16.0 | 6.12 | `kernel-default` | `6.12.0-160000.40.1` | openSUSE-Leap-16.0-1973 | 仅检测 |
+| SLES 16.0 | 6.12 | `kernel-default` | `6.12.0-160000.40.1` | SUSE-SLES-16.0-1973 | 仅检测 |
+| SLES 15 SP4-LTSS | 5.14 | `kernel-default` | `5.14.21-150400.24.246.1` | SUSE-SLE-Product-SLES-15-SP4-LTSS-2026-4937 | 仅检测，需 LTSS 订阅 |
+| SLES 15 SP5-LTSS | 5.14 | `kernel-default` | `5.14.21-150500.55.195.1` | SUSE-SLE-Product-SLES-15-SP5-LTSS-2026-4936 | 仅检测，需 LTSS 订阅 |
+| SLES 15 SP6-LTSS | 6.4 | `kernel-default` | `6.4.0-150600.23.143.1` | SUSE-SLE-Product-SLES-15-SP6-LTSS-2026-4934 | 仅检测，需 LTSS 订阅 |
+| SLES 15 SP7 | 6.4 | `kernel-default` | 状态冲突，见下文 | SUSE CVE 页面 | UNKNOWN |
+| SLE Micro 6.2 | 6.12 | `kernel-default` | `6.12.0-160000.40.1` | SUSE-SL-Micro-6.2-1973 | 仅检测，事务式更新 |
+| AlmaLinux 8 | 4.18 | `kernel` | `4.18.0-553.180.2.el8_10`（testing） | [AlmaLinux 公告](https://almalinux.org/blog/2026-10-30-cve-2026-98432/) | 仅测试仓库 |
+| AlmaLinux 9 | 5.14 | `kernel` | `5.14.0-687.61.2.el9_8`（testing） | [AlmaLinux 公告](https://almalinux.org/blog/2026-10-30-cve-2026-98432/) | 仅测试仓库 |
+| AlmaLinux 10 | 6.12 | `kernel` | `6.12.0-211.69.2.el10_2`（testing） | [AlmaLinux 公告](https://almalinux.org/blog/2026-10-30-cve-2026-98432/) | 仅测试仓库 |
+
+补充说明：
+
+- Oracle Linux 的 UEKR6、UEKR7、UEKR8 是三条独立基线，`el7uek`、`el8uek`、`el9uek`、`el10uek` 后缀不能互换。OL8 与 OL9 各自同时存在两个代际，工具按运行内核的实际分支选择。RHCK 没有独立勘误，保持 `UNKNOWN`。
+- SUSE 的 `kernel-default-base` 完整 EVR 与 `kernel-default` 不同，例如 SLES 16.0 为 `6.12.0-160000.40.1.160000.2.30`，工具按运行内核实际包名匹配，不共用短 EVR。
+- SLES 15 SP7 的官方「List of released packages」列出了 `kernel-default >= 6.4.0-150700.53.90.1`，但同一页面的状态表仍为 `In progress`，两者矛盾，工具按 `UNKNOWN` 处理，不把它当作已发布修复。
+- AlmaLinux 的 testing 内核需要手动启用 `almalinux-testing` 仓库，官方明确说明社区验证后才进入生产仓库。工具不会启用该仓库，状态为 `PATCH_TESTING_ONLY`（退出码 7）。
+- 以上发行版的自动修复开关全部为 `no`，`--yes` 不能绕过。
+
 ### 仅检测：官方尚未发布修复包
 
 | 发行版 | 官方状态 | 官方页面 |
@@ -180,11 +213,9 @@ Debian 12 的 `6.12.113-1~deb12u1` 是回移版本，不与 Debian 13 的 `6.12.
 | 发行版 | 未启用自动修复的原因 |
 | --- | --- |
 | Rocky Linux | Errata 站点为前端应用，未取得该 CVE 的可机读勘误；不按 RHEL 结论等同处理 |
-| AlmaLinux | `errata.full.json` 中无该 CVE 记录，缺少勘误不等于确认未修复 |
-| Oracle Linux | UEK 与 RHCK 需分别核验，目前未取得任一内核的修复 EVR |
-| Fedora Linux | 上游修复位于 mainline 7.3-rc7，当前发行版内核是否回移无法确认 |
-| openSUSE Leap / SUSE Linux Enterprise | 官方 CVE 页面拒绝自动访问，且存在多内核并存与启动项选择问题 |
-| Arch Linux | 滚动发行版，安全追踪器无该 CVE 条目，不能用固定版本号判断 |
+| Oracle Linux (RHCK) | 只取得 UEK 勘误，RHCK 没有独立官方公告，不能套用 UEK 的修复版本 |
+| Fedora Linux | 稳定仓库已有 7.2.13/7.2.14，但未从官方构建记录确认包含上游修复提交 `26d4c36` |
+| Arch Linux | Core 为 7.2.11，高于上游 7.2.10 修复点，但未核对打包源码；安全更新通常需要 `pacman -Syu` 全系统升级 |
 | Alpine Linux | secdb 中无该 CVE 记录，且 `linux-lts`、`linux-virt`、`linux-edge` 不可混为一谈 |
 
 这些系统会输出发行版、版本、架构、运行内核、对应内核软件包与官方公告入口，状态为 `UNKNOWN`（退出码 4），不进入安装路径。
@@ -207,7 +238,7 @@ Debian 12 的 `6.12.113-1~deb12u1` 是回移版本，不与 Debian 13 的 `6.12.
 2. 规范化架构，并与包管理器报告的架构交叉核对。
 3. 将运行内核映射到已安装的内核软件包，读取其版本。
 4. 查询 `data/cve-2026-98432.yml` 中对应的核验记录，取得修复版本、公告编号与是否允许自动修复。
-5. 用对应包管理器的版本语义比较运行内核与修复版本，输出六种状态之一。
+5. 用对应包管理器的版本语义比较运行内核与修复版本，输出七种状态之一。
 
 ### 修复步骤
 
@@ -252,13 +283,16 @@ Debian 12 的 `6.12.113-1~deb12u1` 是回移版本，不与 Debian 13 的 `6.12.
 | `tests/test_amazon_linux.sh` | 11 | AL2 4.14/5.10/5.15 与 AL2023 6.1/6.12/6.18 的独立基线、完整安装、dnf 失败、initramfs 缺失、用户取消 |
 | `tests/test_version.sh` | 5 | RPM EVR（epoch、release、`~`）、apk 修订号与后缀、pacman、dpkg 回移版本、未知版本家族 |
 | `tests/test_safety.sh` | 8 | 非白名单发行版指定 `--yes` 也不安装、`--check` 只读、`--report` 无副作用、适配层能力声明完整、白名单最小化、静态扫描 |
+| `tests/test_new_distros.sh` | 14 | Oracle UEKR6/R7/R8 与 RHCK 拒绝、SUSE 产品/SP/flavor 精确匹配、SP7 状态冲突、SLE Micro 事务式更新、AlmaLinux testing 与 `--yes` 不可绕过 |
+| `tests/test_baseline.sh` | 7 | 基线静态检查：ID 与组合键唯一、EVR 与公告完整、通配记录不得声明 fixed、`autofix=yes` 的验证证据 |
+| `tests/test_installer.sh` | 7 | 整包校验：哈希不符、清单缺失、路径穿越、归档成员异常、正常清单通过 |
 
-合计 66 个用例。
+合计 94 个用例。
 
 ### 测试环境
 
 - 本地：Windows + Git Bash，构造假根目录并注入 `dpkg`、`apt-get`、`rpm`、`dnf`、`yum`、`apk`、`pacman`、`uname` 的模拟实现。
-- CI：GitHub Actions 执行 5 个测试套件与 ShellCheck 0.11.0（`-S style -x`），另有 12 个发行版容器的只读识别冒烟任务。
+- CI：GitHub Actions 执行 8 个测试套件与 ShellCheck 0.11.0（`-S style -x`），另有 12 个发行版容器的只读识别冒烟任务。
 - 容器冒烟覆盖：Debian 12/13、Ubuntu 22.04/24.04、Rocky Linux 9、AlmaLinux 9、Fedora、openSUSE Leap 15.6、Alpine 3.20、Arch Linux、Amazon Linux 2/2023。
 
 ### 测试未覆盖的部分
@@ -267,15 +301,20 @@ Debian 12 的 `6.12.113-1~deb12u1` 是回移版本，不与 Debian 13 的 `6.12.
 
 ## 已知限制
 
-1. 自动修复仅覆盖 Debian 12/13 与 Amazon Linux 2/2023，其余发行版只做检测或识别。
-2. 未在真实 AWS 实例上执行 Amazon Linux 的内核安装；其 `dnf`/`yum` 流程、重启后生效与引导行为由模拟测试覆盖。
-3. Debian 仅支持 amd64；其他发行版的自动修复能力以支持矩阵为准。
-4. 容器环境不判定，返回 `UNKNOWN`。
-5. 自编译或第三方内核无法映射到发行版软件包，返回 `UNKNOWN`。
-6. Amazon Linux 的 `kernel-livepatch` 不在判定范围内，修复以重启进入新内核为准。
-7. RPM 系不自动重建引导配置，启动项缺失时停止并给出人工命令。
-8. 发行版衍生关系不继承结论，Rocky Linux、AlmaLinux、Oracle Linux 不使用 RHEL 的判定结果。
-9. 基线更新需要人工核对官方公告后提交，工具本身不抓取公告。
+1. 自动修复仅覆盖 Debian 12/13 与 Amazon Linux 2/2023。Oracle Linux UEK、SUSE/openSUSE、AlmaLinux 只做检测与状态展示，基线中的 `autofix` 全部为 `no`。
+2. 新增的 Oracle Linux、SUSE/openSUSE、AlmaLinux 基线未在真实虚拟机或云主机完成「安装 → 引导项检查 → 重启 → 重新检测为 `FIXED`」验证。容器与模拟测试不能替代实机验证，因此不启用自动修复。
+3. Oracle Linux 7 的 UEKR6 修复包位于 `ol7_x86_64_UEKR6_ELS` 频道，需要有效的 ELS 订阅；工具不判断订阅状态，只展示官方 EVR 与频道。
+4. SUSE 的 LTSS 基线需要对应的 LTSS 订阅与仓库资格，仓库不可见时无法安装；`kernel-default`、`kernel-default-base`、`kernel-azure`、`kernel-rt`、`kernel-64kb`、`kernel-kvmsmall` 各自独立，未单独记录的 flavor 返回 `UNKNOWN`。
+5. SLES 15 SP7 的官方发布包列表与产品状态表互相矛盾，工具按 `UNKNOWN` 处理，不把它当作已发布修复。
+6. AlmaLinux 8/9/10 的修复内核只在 testing 仓库，工具不会启用 `almalinux-testing`，也不会安装测试内核。
+7. 未在真实 AWS 实例上执行 Amazon Linux 的内核安装；其 `dnf`/`yum` 流程、重启后生效与引导行为由模拟测试覆盖。
+8. Debian 仅支持 amd64；其他发行版的自动修复能力以支持矩阵为准。
+9. 容器环境不判定，返回 `UNKNOWN`。
+10. 自编译或第三方内核无法映射到发行版软件包，返回 `UNKNOWN`。
+11. Amazon Linux 的 `kernel-livepatch` 不在判定范围内，修复以重启进入新内核为准。
+12. RPM 系与 SUSE 不自动重建引导配置，启动项缺失时停止并给出人工命令。
+13. 发行版衍生关系不继承结论，Rocky Linux、AlmaLinux、Oracle Linux 不使用 RHEL 的判定结果，RHCK 不使用 UEK 的判定结果。
+14. 基线更新需要人工核对官方公告后提交，工具本身不抓取公告。
 
 ## 常见问题
 
@@ -302,21 +341,21 @@ Debian 12 的 `6.12.113-1~deb12u1` 是回移版本，不与 Debian 13 的 `6.12.
 ## 项目结构
 
 ```
-install.sh                  引导安装器：下载指定 Tag 的整包、校验 fix.sh 的 SHA256、转调 fix.sh
+install.sh                  引导安装器：下载指定 Tag 的整包、整包 SHA256 校验、转调 fix.sh
 fix.sh                      入口：参数解析、流程编排、状态机出口
 lib/
   common.sh                 退出码、颜色、日志、路径与容器识别
-  detect.sh                 发行版、版本、架构与内核识别
+  detect.sh                 发行版、版本、架构、内核流与 flavor 识别
   version.sh                dpkg、rpm、apk、pacman 版本比较
-  advisory.sh               基线加载与查询
+  advisory.sh               基线加载、通配查询与严格匹配
   kernel.sh                 运行内核与软件包的映射
-  package_manager.sh        apt、dnf、yum 抽象
+  package_manager.sh        apt、dnf、yum、zypper 抽象
   install.sh                计划输出、安装、安装后校验、重启提示
-  status.sh                 六态状态机
+  status.sh                 七态状态机
   report.sh                 --list-distros 与 --report
 adapters/                   11 个发行版适配文件，声明身份、版本范围与能力
-data/cve-2026-98432.yml     核验后的官方修复基线
-tests/                      5 个测试套件、模拟实现与容器冒烟脚本
+data/cve-2026-98432.yml     核验后的官方修复基线（含产品、内核流、flavor、仓库渠道）
+tests/                      8 个测试套件、模拟实现与容器冒烟脚本
 ```
 
 ## 许可证

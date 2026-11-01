@@ -24,7 +24,7 @@
 
 set -Eeuo pipefail
 
-readonly SCRIPT_VERSION="1.1.2"
+readonly SCRIPT_VERSION="1.2.0"
 readonly SCRIPT_NAME="${0##*/}"
 readonly CVE_ID="CVE-2026-98432"
 readonly PROJECT_URL="https://github.com/AronWang001/linux-cve-2026-98432-fix"
@@ -415,6 +415,7 @@ report_status_exit() {
         "${ST_PENDING}") printf '%s\n' "${EX_PENDING_REBOOT}" ;;
         "${ST_VULN_FIXABLE}") printf '%s\n' "${EX_VULNERABLE}" ;;
         "${ST_NOT_RELEASED}") printf '%s\n' "${EX_PATCH_NOT_RELEASED}" ;;
+        "${ST_TESTING}") printf '%s\n' "${EX_PATCH_TESTING_ONLY}" ;;
         "${ST_UNSUPPORTED}") printf '%s\n' "${EX_ERROR}" ;;
         *) printf '%s\n' "${EX_UNKNOWN}" ;;
     esac
@@ -486,6 +487,14 @@ main() {
             printf '  建议：保持关注官方公告，发布修复包后更新本工具基线再执行。\n\n'
             exit "${EX_PATCH_NOT_RELEASED}"
             ;;
+        "${ST_TESTING}")
+            printf '\n%s官方只在 testing 仓库提供了修复包，生产仓库尚未发布。%s\n' "${C_YELLOW}" "${C_RESET}"
+            printf '  官方依据：%s\n' "${ADVISORY:-未知}"
+            printf '  测试版本：%s\n' "${FIXED_VERSION:-未知}"
+            printf '  本脚本不会启用 testing 源，也不会安装测试内核。\n'
+            printf '  建议：等待官方将该内核移入生产仓库后，更新本工具基线再执行。\n\n'
+            exit "${EX_PATCH_TESTING_ONLY}"
+            ;;
         "${ST_PENDING}")
             NEW_KERNEL_RELEASE="${INSTALLED_FIXED_RELEASE}"
             NEW_KERNEL_VERSION="${INSTALLED_FIXED_VERSION}"
@@ -495,20 +504,24 @@ main() {
             ;;
         "${ST_VULN_FIXABLE}")
             if [[ ${MODE} == "check" ]]; then
-                printf '\n%s当前系统受 %s 影响，可执行以下命令修复：%s\n' "${C_YELLOW}" "${CVE_ID}" "${C_RESET}"
-                printf '    sudo bash %s\n\n' "${SCRIPT_NAME}"
                 if [[ ${AUTOFIX} -eq 1 ]]; then
+                    printf '\n%s当前系统受 %s 影响，可执行以下命令修复：%s\n' "${C_YELLOW}" "${CVE_ID}" "${C_RESET}"
+                    printf '    sudo bash %s\n\n' "${SCRIPT_NAME}"
                     if [[ ${DISTRO_FAMILY} == "debian" ]] && select_target_package; then
                         printf '  预计安装：%s（%s）\n\n' "${TARGET_PKG}" "${TARGET_VERSION}"
                     elif [[ ${DISTRO_FAMILY} == "rpm" ]] && select_target_rpm; then
+                        printf '  预计安装：%s（%s）\n\n' "${TARGET_PKG}" "${TARGET_VERSION}"
+                    elif [[ ${DISTRO_FAMILY} == "suse" ]] && select_target_suse; then
                         printf '  预计安装：%s（%s）\n\n' "${TARGET_PKG}" "${TARGET_VERSION}"
                     else
                         printf '  %s软件源中暂未找到可用的修复内核，请先检查官方仓库并刷新索引。%s\n\n' \
                             "${C_YELLOW}" "${C_RESET}"
                     fi
                 else
-                    printf '  %s该发行版未启用自动修复，请按官方公告手工升级内核。%s\n\n' \
-                        "${C_YELLOW}" "${C_RESET}"
+                    # 只检测的发行版不能引导用户执行修复命令，否则与「未启用自动修复」自相矛盾。
+                    printf '\n%s当前系统受 %s 影响，但该发行版未启用自动修复。%s\n\n' \
+                        "${C_YELLOW}" "${CVE_ID}" "${C_RESET}"
+                    printf '  请按官方公告手工升级内核，或等待本工具完成实机验证后再启用自动修复。\n'
                     printf '  官方状态：%s\n\n' "${ADVISORY_URL}"
                 fi
                 exit "${EX_VULNERABLE}"
