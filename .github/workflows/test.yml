@@ -2,7 +2,7 @@ name: test
 
 on:
   push:
-    branches: [main, "feature/**"]
+    branches: [main, "feature/**", "chore/**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
