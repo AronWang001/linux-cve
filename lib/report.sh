@@ -8,7 +8,7 @@
 # STATUS / STATUS_REASON / AUTOFIX 等全局状态由 fix.sh 初始化，ShellCheck
 # 无法跨文件看到赋值，会误判为可能拼写错误，故在此关闭 SC2153。
 # shellcheck disable=SC2153
-ADAPTER_IDS=(debian ubuntu amazon_linux rhel rocky almalinux oracle_linux fedora suse arch alpine)
+ADAPTER_IDS=(debian ubuntu amazon_linux rhel rocky almalinux oracle_linux cloudlinux fedora suse arch alpine)
 
 # 按显示宽度补空格（CJK 按 2 列计）
 pad_cjk() {
@@ -26,6 +26,7 @@ status_label() {
         fixed) printf '官方已修复' ;;
         testing) printf '仅测试仓库' ;;
         patch_not_released) printf '官方未修复' ;;
+        not_affected) printf '不受影响' ;;
         *) printf '无法确认' ;;
     esac
 }
@@ -110,6 +111,12 @@ write_report() {
         printf '内核分支      : %s\n' "${KERNEL_BRANCH}"
         printf '内核 flavor   : %s\n' "${KERNEL_FLAVOR:-未知}"
         printf '内核流        : %s\n' "${BASELINE_STREAM:-未知}"
+        if [[ -n ${CL_VARIANT:-} ]]; then
+            printf 'CloudLinux    : %s\n' "${CL_VARIANT}"
+        fi
+        if [[ -n ${CL_ROLLOUT_STATE:-} ]]; then
+            printf 'Rollout       : %s\n' "${CL_ROLLOUT_STATE}（候选 ${CL_ROLLOUT_CAND:-未知}）"
+        fi
         printf '对应软件包    : %s\n' "${RUNNING_PKG:-未知}"
         printf '软件包版本    : %s\n' "${RUNNING_VERSION:-未知}"
         printf '待重启标记    : %s\n' "$([[ ${REBOOT_FLAG} -eq 1 ]] && printf '存在' || printf '不存在')"

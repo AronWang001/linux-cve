@@ -97,9 +97,18 @@ end_case
 begin_case "status 取值合法"
 for ((i = 0; i < BASELINE_COUNT; i++)); do
     case "${B_STATUS[i]}" in
-        fixed | testing | patch_not_released | in_progress | unknown) ;;
+        fixed | testing | patch_not_released | in_progress | not_affected | unknown) ;;
         *) fail "${B_ID[i]} 的 status 非法：${B_STATUS[i]}" ;;
     esac
+done
+end_case
+
+begin_case "not_affected 记录不得带修复版本或自动修复"
+for ((i = 0; i < BASELINE_COUNT; i++)); do
+    [[ ${B_STATUS[i]} == "not_affected" ]] || continue
+    [[ -z ${B_FIXED[i]} ]] || fail "${B_ID[i]} 声明 not_affected 却给出了 fixed_version：${B_FIXED[i]}"
+    [[ ${B_AUTOFIX[i]} != "yes" ]] || fail "${B_ID[i]} 声明 not_affected 却允许自动修复"
+    [[ -n ${B_NOTES[i]} ]] || fail "${B_ID[i]} 声明 not_affected 但缺少官方依据说明"
 done
 end_case
 

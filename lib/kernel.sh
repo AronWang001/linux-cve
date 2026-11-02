@@ -89,6 +89,9 @@ _rpm_is_kernel_pkg() {
         kernel-rt | kernel-rt-core | kernel-default | kernel-default-base) return 0 ;;
         kernel-lpae | kernel-vanilla | kernel-kvmsmall | kernel-64k | kernel-64kb) return 0 ;;
         kernel-azure | kernel-azure-core | kernel-uek64k) return 0 ;;
+        # CloudLinux LTS（TuxCare ELS）使用独立的 kernel-lts 包名，
+        # 与标准内核 kernel 的 EVR 完全不同，必须单独识别。
+        kernel-lts) return 0 ;;
         kernel6.*) [[ "$1" =~ ^kernel6\.[0-9]+(-core)?$ ]] && return 0 ;;
     esac
     return 1

@@ -4,9 +4,9 @@
 
 This tool checks whether the kernel currently running on a Linux server is affected by CVE-2026-98432 and, on distributions that have been fully adapted and verified, installs the official fixed kernel package. It covers distribution identification, kernel-to-package mapping, vulnerability assessment, kernel installation, and post-installation verification. It does not modify application configuration and never reboots the server.
 
-Automatic remediation is limited to Debian 12/13 and Amazon Linux 2/2023. Ubuntu and Red Hat Enterprise Linux are detection-only because no confirmed fixed package has been published. All other listed distributions are identified and reported but never enter the installation path. See [Supported Distributions](#supported-distributions) for the current matrix.
+Automatic remediation is limited to Debian 12/13 and Amazon Linux 2/2023. Ubuntu, Red Hat Enterprise Linux, and CloudLinux are detection-only: CloudLinux has published fixed packages, but they are subject to staged rollout and subscription entitlement, so the tool reports the exact versions and channels instead of installing. All other listed distributions are identified and reported but never enter the installation path. See [Supported Distributions](#supported-distributions) for the current matrix.
 
-Current version: v1.2.0. See [CHANGELOG.md](CHANGELOG.md) for changes.
+Current version: v1.3.0. See [CHANGELOG.md](CHANGELOG.md) for changes.
 
 ## Vulnerability Information
 
@@ -33,7 +33,7 @@ Whether a distribution is affected and which version carries the fix are determi
 
 ## Requirements
 
-- Operating systems: automatic remediation is available on Debian 12 (bookworm), Debian 13 (trixie), Amazon Linux 2, and Amazon Linux 2023. Detection is available on Ubuntu 20.04/22.04/24.04 and RHEL 8/9/10. Identification is available on Rocky Linux, AlmaLinux, Oracle Linux, Fedora, openSUSE Leap, SUSE Linux Enterprise, Arch Linux, and Alpine Linux. A distribution version outside an adapter's declared range returns `UNSUPPORTED`.
+- Operating systems: automatic remediation is available on Debian 12 (bookworm), Debian 13 (trixie), Amazon Linux 2, and Amazon Linux 2023. Detection is available on Ubuntu 20.04/22.04/24.04, RHEL 8/9/10, and CloudLinux 7/7h/8/8 LTS/9/9 LTS/10, including both the standard `kernel` and the `kernel-lts` streams. Identification is available on Rocky Linux, AlmaLinux, Oracle Linux, Fedora, openSUSE Leap, SUSE Linux Enterprise, Arch Linux, and Alpine Linux. A distribution version outside an adapter's declared range returns `UNSUPPORTED`.
 - Architecture: the remediation path enforces an architecture allowlist. Debian is limited to amd64; Amazon Linux 2/2023 support x86_64 and aarch64. Detection-only and identification-only distributions are not blocked on architecture, but the running kernel must still map to a distribution package.
 - Privileges: root is required. Only `--list-distros` can be run as an unprivileged user.
 - Dependencies: Bash 4.0 or later, coreutils, `awk`, `sed`, `grep`, `tar`, `find`, and the package manager tools for the target distribution (`dpkg`/`apt-get`/`apt-cache`, `rpm`/`dnf`/`yum`, `apk`, `pacman`, `zypper`). The bootstrap installer additionally requires `curl` and `sha256sum` (or `shasum`).
@@ -44,7 +44,7 @@ Whether a distribution is affected and which version carries the fix are determi
 ### One-command execution
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh | sudo bash
 ```
 
 `install.sh` is a bootstrap installer and makes no system changes itself. It downloads the source archive for the pinned tag into a temporary directory, fetches `SHA256SUMS` from the release, verifies `fix.sh`, `install.sh`, every file under `lib/` and `adapters/`, and the baseline YAML under `data/`, and only then executes `fix.sh` with the same arguments. After detection it prints the planned change and installs the kernel only after you answer `Y`. The confirmation prompt reads from `/dev/tty`, so it still works when the installer is piped into `bash`; `sudo` may ask for a password.
@@ -54,7 +54,7 @@ Verification fails closed. A missing or empty `SHA256SUMS`, a manifest that does
 ### Read-only check
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh | sudo bash -s -- --check
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh | sudo bash -s -- --check
 ```
 
 This reads system state only: no repository index refresh, no package installation, no configuration changes. `--check` governs the detection and remediation phases; it does not prevent `install.sh` from downloading the archive. If the local package index is empty, candidate versions will be reported as unknown, so run `apt-get update` or `dnf makecache` first.
@@ -62,7 +62,7 @@ This reads system state only: no repository index refresh, no package installati
 ### Unattended execution
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh | sudo bash -s -- --yes
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh | sudo bash -s -- --yes
 ```
 
 `--yes` skips the confirmation prompt only. It does not bypass the distribution allowlist, advisory verification, or version checks. Distributions outside the allowlist never enter the installation path, even with `--yes`.
@@ -70,7 +70,7 @@ curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fi
 ### Download, review, then run
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh
+curl -fsSLO https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh
 less install.sh
 sudo bash install.sh --check
 sudo bash install.sh
@@ -81,7 +81,7 @@ sudo bash install.sh
 `fix.sh` depends on the `lib/`, `adapters/`, and `data/` directories next to it and cannot be used on its own:
 
 ```bash
-git clone --branch v1.2.0 --depth 1 https://github.com/AronWang001/linux-cve-2026-98432-fix.git
+git clone --branch v1.3.0 --depth 1 https://github.com/AronWang001/linux-cve-2026-98432-fix.git
 cd linux-cve-2026-98432-fix
 sudo bash fix.sh --check
 sudo bash fix.sh
@@ -93,11 +93,11 @@ sudo bash fix.sh
 
 ```bash
 mkdir -p /tmp/cve-verify && cd /tmp/cve-verify
-base=https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v1.2.0
+base=https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v1.3.0
 curl -fsSLO "${base}/SHA256SUMS"
-curl -fsSL -o src.tar.gz https://github.com/AronWang001/linux-cve-2026-98432-fix/archive/refs/tags/v1.2.0.tar.gz
+curl -fsSL -o src.tar.gz https://github.com/AronWang001/linux-cve-2026-98432-fix/archive/refs/tags/v1.3.0.tar.gz
 tar -xzf src.tar.gz
-cd linux-cve-2026-98432-fix-1.2.0
+cd linux-cve-2026-98432-fix-1.3.0
 sha256sum -c ../SHA256SUMS
 ```
 
@@ -114,6 +114,7 @@ Every entry should report `OK`. The extracted directory name follows the reposit
 | `--list-distros` | Print the support matrix: detection support, automatic remediation support, official patch status, and verification date. Does not require root |
 | `--report [file]` | Write a detection report to the current directory as `cve-2026-98432-report-<timestamp>.txt` by default. The report contains no passwords, tokens, or private keys |
 | `--no-color` | Disable colored output, for log collection |
+| `--allow-staged-rollout` | CloudLinux only: acknowledges the risk of the official rollout bypass `cloudlinux-rollout-3-bypass`. The repository is never enabled by default and no repo file is written; CloudLinux is detection-only in this release, so nothing is installed even with this flag |
 | `-h`, `--help` | Show help |
 | `-V`, `--version` | Show version information |
 
@@ -126,6 +127,7 @@ Every entry should report `OK`. The extracted directory name follows the reposit
 | `VULNERABLE_PATCH_AVAILABLE` | A fixed package is available and the running kernel is still affected | 2 |
 | `PATCH_NOT_RELEASED` | No confirmed fixed package has been published; status only, nothing installed | 6 |
 | `PATCH_TESTING_ONLY` | A fixed package exists only in a testing repository; production repositories do not have it, nothing installed | 7 |
+| `NOT_AFFECTED` | The official advisory states the kernel branch does not contain the vulnerable code; nothing to do | 8 |
 | `UNKNOWN` | Advisory, kernel origin, package mapping, or version cannot be confirmed | 4 |
 | `UNSUPPORTED` | System, release, architecture, or kernel flavor is not supported | 1 |
 | Cancelled | The operator declined at the confirmation prompt; no changes made | 5 |
@@ -145,7 +147,7 @@ Run `--check` again after the reboot. The remediation is complete only when the 
 
 ## Supported Distributions
 
-The baseline was last verified on 2026-11-01. Entries come from official advisories and security trackers, are reviewed manually, and are stored in `data/cve-2026-98432.yml`. This is not a live feed. Run `sudo bash fix.sh --list-distros` to see what the installed tool reports; `bash fix.sh --list-distros` also works as an unprivileged user.
+The baseline was last verified on 2026-11-02. Entries come from official advisories and security trackers, are reviewed manually, and are stored in `data/cve-2026-98432.yml`. This is not a live feed. Run `sudo bash fix.sh --list-distros` to see what the installed tool reports; `bash fix.sh --list-distros` also works as an unprivileged user.
 
 ### Automatic detection and remediation
 
@@ -186,14 +188,33 @@ For the distributions below, the official fixed packages exist and the tool repo
 | AlmaLinux 8 | 4.18 | `kernel` | `4.18.0-553.180.2.el8_10` (testing) | [AlmaLinux announcement](https://almalinux.org/blog/2026-10-30-cve-2026-98432/) | Testing repository only |
 | AlmaLinux 9 | 5.14 | `kernel` | `5.14.0-687.61.2.el9_8` (testing) | [AlmaLinux announcement](https://almalinux.org/blog/2026-10-30-cve-2026-98432/) | Testing repository only |
 | AlmaLinux 10 | 6.12 | `kernel` | `6.12.0-211.69.2.el10_2` (testing) | [AlmaLinux announcement](https://almalinux.org/blog/2026-10-30-cve-2026-98432/) | Testing repository only |
+| CloudLinux 7h (Hybrid) | 4.18 | `kernel` | `4.18.0-553.180.1.lve.1` | [CloudLinux announcement](https://blog.cloudlinux.com/cve-2026-98432-linux-kernel-ipv4-tcp-flaw-status-for-cloudlinux) | Detection only, staged rollout |
+| CloudLinux 8 | 4.18 | `kernel` | `4.18.0-553.180.1.lve.1` | [CloudLinux announcement](https://blog.cloudlinux.com/cve-2026-98432-linux-kernel-ipv4-tcp-flaw-status-for-cloudlinux) | Detection only, staged rollout |
+| CloudLinux 8 LTS | 5.14 | `kernel-lts` | `5.14.0-284.1101.el8.tuxcare.11.els19` | CloudLinux announcement, Stream 3 | Detection only, TuxCare ELS subscription required |
+| CloudLinux 9 LTS | 5.14 | `kernel-lts` | `5.14.0-284.1101.el9.tuxcare.11.els19` | CloudLinux announcement, Stream 3 | Detection only, TuxCare ELS subscription required |
+| CloudLinux 9 | 5.14 | `kernel` | `5.14.0-687.61.2.el9_8` (testing) | CloudLinux announcement, Stream 2 | Testing repository only |
+| CloudLinux 10 | 6.12 | `kernel` | `6.12.0-211.69.2.el10_2` (testing) | CloudLinux announcement, Stream 2 | Testing repository only |
 
 Notes:
 
 - UEKR6, UEKR7, and UEKR8 are separate baselines on Oracle Linux. The `el7uek`, `el8uek`, `el9uek`, and `el10uek` suffixes are not interchangeable, and OL8 and OL9 each carry two generations at the same time; the tool selects by the running kernel branch. RHCK has no separate erratum and remains `UNKNOWN`.
 - On SUSE, `kernel-default-base` has a longer EVR than `kernel-default` (for example `6.12.0-160000.40.1.160000.2.30` on SLES 16.0). Matching uses the installed package name, so the short EVR is never reused.
-- The official SUSE "List of released packages" section lists `kernel-default >= 6.4.0-150700.53.90.1` for SLES 15 SP7, while the product status table still reports `In progress`. The tool treats that conflict as `UNKNOWN` rather than a published fix.
+- The official SUSE page lists `kernel-default >= 6.4.0-150700.53.90.1` under "List of packages in QA" for SLES 15 SP7, while the product status table still reports `In progress` and no matching SUSE-SU advisory exists. The tool treats that conflict as `UNKNOWN` rather than a published fix.
 - AlmaLinux testing kernels require the `almalinux-testing` repository, which the tool never enables. The status is `PATCH_TESTING_ONLY` (exit code 7).
+- CloudLinux uses staged rollout: an officially published fix does not mean this instance's repositories already serve it. The tool queries the repository candidate read-only and, when the rollout has not reached the host, reports "published, but this instance is not in the staged rollout yet" without installing.
+- On CloudLinux the standard `kernel` and the LTS `kernel-lts` are separate streams with unrelated EVRs. CL9 runs 5.14 on both, so they can only be distinguished by package name, never by the version in `uname -r`.
+- `cloudlinux-rollout-3-bypass` is the official rollout bypass. The tool never enables it by default and never writes a repo file; `--allow-staged-rollout` only prints the risk notice and, in this release, does not install anything.
+- CloudLinux 8/9 LTS belong to TuxCare ELS and require an active subscription and repository entitlement. The tool does not evaluate entitlement and only reports the official EVR and channel when no candidate is visible.
+- CloudLinux 9/10 standard kernels are fixed only in the AlmaLinux testing repository. The tool never installs `almalinux-release-testing` and never runs `dnf update 'kernel*'`.
 - Automatic remediation is `no` for every distribution in this table; `--yes` cannot override it.
+
+### Officially not affected
+
+| Distribution | Kernel branch | Kernel package | Official basis | Status |
+| --- | --- | --- | --- | --- |
+| CloudLinux 7 (standard kernel) | 3.10 | `kernel` | Official announcement: the vulnerable code was introduced in Linux 4.4, so CL7 is not affected | `NOT_AFFECTED`, exit code 8 |
+
+The 3.10 kernel in CloudLinux 7 does not contain the vulnerable code, so no installation or reboot is needed. The tool never installs the CloudLinux 7h 4.18 kernel on CL7: 7h is only selected when the running branch is 4.18 on the `kernel` package.
 
 ### Detection only: no fixed package published
 
@@ -217,6 +238,7 @@ The versions marked work in progress are in-development package versions, not pu
 | Fedora Linux | Stable carries 7.2.13/7.2.14, but the official build records were not checked for upstream commit `26d4c36` |
 | Arch Linux | Core ships 7.2.11, above the upstream 7.2.10 fix point, but the packaging source was not reviewed; security updates normally require a full `pacman -Syu` |
 | Alpine Linux | No record in secdb, and `linux-lts`, `linux-virt`, and `linux-edge` cannot be treated as interchangeable |
+| CloudLinux for Ubuntu 22.04 | The kernel comes from Canonical (apt) and the official fix is still in progress; the tool does not apply RPM logic and does not install anything |
 
 These systems report distribution, release, architecture, running kernel, the corresponding kernel package, and the advisory entry point. The status is `UNKNOWN` (exit code 4) and the installation path is never reached.
 
@@ -238,7 +260,7 @@ These systems report distribution, release, architecture, running kernel, the co
 2. Normalize the architecture and cross-check it against the package manager's reported architecture.
 3. Map the running kernel to the installed kernel package and read its version.
 4. Look up the matching verified record in `data/cve-2026-98432.yml` to obtain the fixed version, advisory identifier, and whether automatic remediation is permitted.
-5. Compare the running kernel with the fixed version using the package manager's version semantics and emit one of seven statuses.
+5. Compare the running kernel with the fixed version using the package manager's version semantics and emit one of eight statuses.
 
 ### Remediation steps
 
@@ -284,30 +306,31 @@ Before you run it:
 | `tests/test_version.sh` | 5 | RPM EVR (epoch, release, `~`), apk revision and suffixes, pacman, dpkg backport versions, unknown version families |
 | `tests/test_safety.sh` | 8 | No installation on non-allowlisted distributions even with `--yes`, `--check` is read-only, `--report` has no side effects, adapter capability declarations are complete, allowlist minimality, static scan |
 | `tests/test_new_distros.sh` | 14 | Oracle UEKR6/R7/R8 and RHCK rejection, SUSE product/service pack/flavor matching, SP7 status conflict, SLE Micro transactional updates, AlmaLinux testing and `--yes` cannot bypass |
-| `tests/test_baseline.sh` | 7 | Baseline static checks: unique IDs and combination keys, complete EVR and advisory, no wildcard `fixed` records, evidence for `autofix=yes` |
+| `tests/test_baseline.sh` | 8 | Baseline static checks: unique IDs and combination keys, complete EVR and advisory, no wildcard `fixed` records, `not_affected` records must not carry a fixed version, evidence for `autofix=yes` |
 | `tests/test_installer.sh` | 7 | Whole-archive verification: hash mismatch, missing manifest entry, path traversal, unsafe archive member, clean manifest passes |
+| `tests/test_cloudlinux.sh` | 17 | CL7 3.10 not affected, CL7h/CL8 4.18 with staged rollout, CL8/9 LTS via `kernel-lts`, CL9/10 testing only, identity cross-check, CloudLinux for Ubuntu, `--allow-staged-rollout` never enabling the bypass, read-only `--check` |
 
-94 cases in total.
+112 cases in total.
 
 Compared with v1.1.2, four cases in `tests/test_detection.sh` have updated expectations: AlmaLinux 9.4 moves from `4` to `7`, and Oracle Linux 9.4 UEKR7 and SLES 15 SP5 from `4` to `2` (these three combinations now have a definite answer instead of `UNKNOWN`); D12 is no longer "SUSE 15.5 judged `UNKNOWN`" but the SLES 15 SP7 contradictory-status scenario. No case or assertion was removed, and the suite gained six assertions net; a green suite only shows that the current expectations hold, not that v1.1.2's old `UNKNOWN` expectations still pass.
 
 ### Test environments
 
 - Local: Windows with Git Bash. A fake root is assembled and mock implementations of `dpkg`, `apt-get`, `rpm`, `dnf`, `yum`, `apk`, `pacman`, and `uname` are injected.
-- CI: GitHub Actions runs the eight suites plus ShellCheck 0.11.0 (`-S style -x`), and a read-only identification smoke job across 12 distribution containers.
+- CI: GitHub Actions runs the nine suites plus ShellCheck 0.11.0 (`-S style -x`), and a read-only identification smoke job across 12 distribution containers.
 - Container smoke coverage: Debian 12/13, Ubuntu 22.04/24.04, Rocky Linux 9, AlmaLinux 9, Fedora, openSUSE Leap 15.6, Alpine 3.20, Arch Linux, Amazon Linux 2/2023.
 
 ### What the tests do not cover
 
-The suites validate assessment logic, installation flow, and failure handling against mocked package manager output; they do not install a real kernel. The container smoke jobs verify distribution identification and the container refusal path (`UNKNOWN`) only. They do not verify kernel upgrades, initramfs generation, boot entry updates, or behavior after reboot. The Amazon Linux flow has not been exercised end to end on a real AWS instance.
+The suites validate assessment logic, installation flow, and failure handling against mocked package manager output; they do not install a real kernel. The container smoke jobs verify distribution identification and the container refusal path (`UNKNOWN`) only. They do not verify kernel upgrades, initramfs generation, boot entry updates, or behavior after reboot. The Amazon Linux flow has not been exercised end to end on a real AWS instance. The CloudLinux, Oracle Linux, SUSE/openSUSE, and AlmaLinux baselines are likewise verified only in a simulated environment: none has completed install, boot entry inspection, reboot, and re-check on a real instance, so `autofix` stays `no` for those records. The container smoke matrix does not cover CloudLinux either, because its official images require subscription credentials that public CI cannot pull.
 
 ## Known Limitations
 
-1. Automatic remediation covers Debian 12/13 and Amazon Linux 2/2023 only. Oracle Linux UEK, SUSE/openSUSE, and AlmaLinux are detection-only; every baseline record for them has `autofix: no`.
-2. The new Oracle Linux, SUSE/openSUSE, and AlmaLinux baselines have not been validated on a real virtual machine through install, boot entry inspection, reboot, and a re-check that returns `FIXED`. Container and mocked tests are not a substitute, so remediation stays disabled.
+1. Automatic remediation covers Debian 12/13 and Amazon Linux 2/2023 only. Oracle Linux UEK, SUSE/openSUSE, AlmaLinux, and CloudLinux are detection-only; every baseline record for them has `autofix: no`.
+2. The new Oracle Linux, SUSE/openSUSE, AlmaLinux, and CloudLinux baselines have not been validated on a real virtual machine through install, boot entry inspection, reboot, and a re-check that returns `FIXED`. Container and mocked tests are not a substitute, so remediation stays disabled.
 3. The Oracle Linux 7 UEKR6 fixed package is published in the `ol7_x86_64_UEKR6_ELS` channel and requires an active ELS subscription. The tool does not evaluate subscription state; it only reports the official EVR and channel.
 4. SUSE LTSS baselines require the corresponding subscription and repository entitlement. `kernel-default`, `kernel-default-base`, `kernel-azure`, `kernel-rt`, `kernel-64kb`, and `kernel-kvmsmall` are tracked separately; flavors without a record return `UNKNOWN`.
-5. The SUSE page for SLES 15 SP7 lists fixed packages while the product status table still says `In progress`. The tool treats this as `UNKNOWN`.
+5. The SUSE page for SLES 15 SP7 lists `kernel-default >= 6.4.0-150700.53.90.1` only under "List of packages in QA", while the product status table still says `In progress` and no SUSE-SU advisory exists. The tool treats this as `UNKNOWN`.
 6. AlmaLinux 8/9/10 fixed kernels exist only in the testing repository. The tool never enables `almalinux-testing` and never installs testing kernels.
 7. Amazon Linux kernel installation has not been performed on a real AWS instance. Its `dnf`/`yum` flow, post-reboot effect, and boot behavior are covered by mocked tests.
 8. Debian is supported on amd64 only. Remediation support for other distributions follows the support matrix.
@@ -317,6 +340,10 @@ The suites validate assessment logic, installation flow, and failure handling ag
 12. On RPM-based and SUSE systems the tool does not rebuild the boot configuration. If a boot entry is missing it stops and prints the manual command.
 13. Distribution derivatives do not inherit conclusions. Rocky Linux, AlmaLinux, and Oracle Linux never use RHEL results, and RHCK never uses UEK results.
 14. Baseline updates are committed manually after checking official advisories. The tool does not fetch advisories at runtime.
+15. The CloudLinux staged rollout is inspected with a read-only `dnf repoquery` against the configured repositories. When the query fails, the rollout state is reported as unconfirmed and nothing is installed.
+16. CloudLinux 8/9 LTS use `kernel-lts`, which belongs to TuxCare ELS and requires an active subscription. The tool does not add TuxCare repositories and never downloads RPMs from external URLs.
+17. `cloudlinux-rollout-3-bypass` is intentionally not wired into any install path: even with `--allow-staged-rollout`, this release runs no `yum`, never enables the repository, and never writes a repo file.
+18. The `NOT_AFFECTED` verdict for CloudLinux 7 is based on the official announcement. A host running an unofficial 3.10 kernel still returns `UNKNOWN` because the kernel cannot be mapped to the `kernel` package.
 
 ## Troubleshooting
 
@@ -353,11 +380,11 @@ lib/
   kernel.sh                 Running kernel to package mapping
   package_manager.sh        apt, dnf, yum abstraction
   install.sh                Plan output, installation, post-install verification, reboot notice
-  status.sh                 Seven-state machine
+  status.sh                 Eight-state machine (including NOT_AFFECTED)
   report.sh                 --list-distros and --report
-adapters/                   11 distribution adapters declaring identity, release range, and capabilities
-data/cve-2026-98432.yml     Verified official remediation baseline
-tests/                      8 test suites, mocks, and the container smoke script
+adapters/                   12 distribution adapters declaring identity, release range, and capabilities
+data/cve-2026-98432.yml     Verified official remediation baseline (product, kernel stream, flavor, repository channel)
+tests/                      9 test suites, mocks, and the container smoke script
 ```
 
 ## License

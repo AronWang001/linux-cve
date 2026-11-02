@@ -79,6 +79,9 @@ jobs:
       - name: 基线文件静态检查
         run: bash tests/test_baseline.sh
 
+      - name: CloudLinux 7 / 7h / 8 / 8 LTS / 9 / 9 LTS / 10 基线
+        run: bash tests/test_cloudlinux.sh
+
       - name: 安装器整包校验
         run: bash tests/test_installer.sh
 
