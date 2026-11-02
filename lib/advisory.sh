@@ -44,13 +44,15 @@ BASELINE_FILE=""
 BASELINE_LOADED=0
 
 # 去掉值两侧的引号
+# 结果写入 UNQUOTED 而不是标准输出：基线有上百个字段，
+# 每字段一次 $(...) 会 fork 一个子 shell，在 Git Bash/Windows 上累计到分钟级。
 _unquote() {
     local v="$1"
     v="${v%\"}"
     v="${v#\"}"
     v="${v%\'}"
     v="${v#\'}"
-    printf '%s' "${v}"
+    UNQUOTED="${v}"
 }
 
 load_baseline_db() {
@@ -87,7 +89,8 @@ load_baseline_db() {
         key="${key//[[:space:]]/}"
         val="${line#*:}"
         val="${val# }"
-        val="$(_unquote "${val}")"
+        _unquote "${val}"
+        val="${UNQUOTED}"
 
         case "${key}" in
             id) B_ID[cur]="${val}" ;;

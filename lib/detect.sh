@@ -67,6 +67,7 @@ adapter_file_for_id() {
         rhel) printf 'rhel.sh\n' ;;
         rocky) printf 'rocky.sh\n' ;;
         almalinux) printf 'almalinux.sh\n' ;;
+        cloudlinux | cloudlinuxos) printf 'cloudlinux.sh\n' ;;
         ol) printf 'oracle_linux.sh\n' ;;
         amzn) printf 'amazon_linux.sh\n' ;;
         fedora) printf 'fedora.sh\n' ;;
@@ -84,7 +85,7 @@ normalize_release() {
         debian | amazon | fedora)
             printf '%s\n' "${version%%.*}"
             ;;
-        rhel | rocky | almalinux | oracle | ol)
+        rhel | rocky | almalinux | oracle | ol | cloudlinux | cloudlinuxos)
             printf '%s\n' "${version%%.*}"
             ;;
         ubuntu)
@@ -145,6 +146,132 @@ identify_distro() {
     return 0
 }
 
+# ---------------------------------------------------------------------------
+# CloudLinux：身份与内核流
+# ---------------------------------------------------------------------------
+
+# 交叉确认 CloudLinux 身份。返回 0 表示可以继续判定。
+# CloudLinux 9/10 运行的是 AlmaLinux 构建的内核，仅凭 uname -r 会误判成
+# AlmaLinux；反过来，CloudLinux for Ubuntu 22.04 没有 RPM 数据库，不能套
+# 用 RPM 判定流程。两种情况都必须能识别出来。
+cloudlinux_verify_identity() {
+    CL_IDENTITY_OK=1
+    CL_IDENTITY_REASON=""
+    CL_RELEASE_FILE=""
+    CL_RELEASE_PKG=""
+    CL_RPM_PRESENT=0
+
+    if have rpm; then
+        CL_RPM_PRESENT=1
+    fi
+
+    if [[ -r "$(sysfile /etc/cloudlinux-release)" ]]; then
+        CL_RELEASE_FILE="$(head -n 1 "$(sysfile /etc/cloudlinux-release)" 2>/dev/null | tr -d '\r' || true)"
+    fi
+
+    if [[ ${CL_RPM_PRESENT} -eq 1 ]]; then
+        # 默认输出形如 cloudlinux-release-9.6-2.el9.x86_64，去掉包名与架构
+        CL_RELEASE_PKG="$(rpm -q cloudlinux-release 2>/dev/null | head -n 1 | tr -d '\r' || true)"
+        if [[ -n ${CL_RELEASE_PKG} ]]; then
+            CL_RELEASE_PKG="${CL_RELEASE_PKG#cloudlinux-release-}"
+            CL_RELEASE_PKG="${CL_RELEASE_PKG%.*}"
+        fi
+    fi
+
+    # CloudLinux for Ubuntu 22.04：apt 系统、无 RPM 数据库，内核来自 Canonical
+    if [[ ${CL_RPM_PRESENT} -eq 0 ]]; then
+        CL_IDENTITY_OK=0
+        CL_IDENTITY_REASON="检测到 CloudLinux 标识，但系统中没有 RPM 数据库（疑似 CloudLinux for Ubuntu 22.04，内核由 Canonical 提供）。该产品的内核修复仍由 Canonical 推进，本工具不做 RPM 判定，也不安装任何软件。"
+        return 1
+    fi
+
+    if [[ -z ${CL_RELEASE_FILE} ]] && [[ -z ${CL_RELEASE_PKG} ]]; then
+        CL_IDENTITY_OK=0
+        CL_IDENTITY_REASON="未找到 /etc/cloudlinux-release，也未安装 cloudlinux-release 软件包，无法交叉确认 CloudLinux 身份（仅凭 ID_LIKE 不足以判定）。"
+        return 1
+    fi
+
+    if [[ -n ${CL_RELEASE_FILE} ]] && [[ ${CL_RELEASE_FILE,,} != *cloudlinux* ]]; then
+        CL_IDENTITY_OK=0
+        CL_IDENTITY_REASON="/etc/cloudlinux-release 的内容与 CloudLinux 不符（${CL_RELEASE_FILE}），无法确认发行版身份。"
+        return 1
+    fi
+
+    local file_major="" pkg_major=""
+    if [[ ${CL_RELEASE_FILE} =~ ([0-9]+)\.[0-9]+ ]]; then
+        file_major="${BASH_REMATCH[1]}"
+    fi
+    if [[ ${CL_RELEASE_PKG} =~ ^([0-9]+)\. ]]; then
+        pkg_major="${BASH_REMATCH[1]}"
+    fi
+
+    if [[ -n ${file_major} ]] && [[ ${file_major} != "${DISTRO_RELEASE}" ]]; then
+        CL_IDENTITY_OK=0
+        CL_IDENTITY_REASON="/etc/cloudlinux-release 的主版本 ${file_major} 与 /etc/os-release 的 ${DISTRO_RELEASE} 不一致，无法确认发行版版本。"
+        return 1
+    fi
+    if [[ -n ${pkg_major} ]] && [[ ${pkg_major} != "${DISTRO_RELEASE}" ]]; then
+        CL_IDENTITY_OK=0
+        CL_IDENTITY_REASON="cloudlinux-release 软件包的主版本 ${pkg_major} 与 /etc/os-release 的 ${DISTRO_RELEASE} 不一致，无法确认发行版版本。"
+        return 1
+    fi
+    return 0
+}
+
+# 由运行内核包与分支推导 CloudLinux 变体。必须在 kernel_resolve_running 之后调用。
+#   7 + 3.10        -> CL7 标准内核（官方明确不受影响）
+#   7 + 4.18        -> CL7h（Hybrid）
+#   8 + 4.18        -> CL8 标准内核
+#   8/9 + kernel-lts-> TuxCare ELS（LTS）
+#   9 + 5.14 kernel -> CL9 标准内核（AlmaLinux 内核）
+#   10 + 6.12 kernel-> CL10 标准内核
+cloudlinux_detect_stream() {
+    CL_VARIANT=""
+    CL_STREAM=""
+
+    if [[ -z ${RUNNING_PKG} ]]; then
+        return 1
+    fi
+
+    if [[ ${RUNNING_PKG} == "kernel-lts" ]]; then
+        CL_VARIANT="CL${DISTRO_RELEASE} LTS（TuxCare ELS）"
+        CL_STREAM="lts-els"
+        return 0
+    fi
+
+    case "${DISTRO_RELEASE}" in
+        7)
+            if [[ ${KERNEL_BRANCH} == "3.10" ]]; then
+                CL_VARIANT="CL7 标准内核"
+                CL_STREAM="standard-3.10"
+            elif [[ ${KERNEL_BRANCH} == "4.18" ]]; then
+                CL_VARIANT="CL7h（Hybrid）"
+                CL_STREAM="hybrid-4.18"
+            fi
+            ;;
+        8)
+            if [[ ${KERNEL_BRANCH} == "4.18" ]]; then
+                CL_VARIANT="CL8 标准内核"
+                CL_STREAM="standard-4.18"
+            fi
+            ;;
+        9)
+            if [[ ${RUNNING_PKG} == "kernel" ]] && [[ ${KERNEL_BRANCH} == "5.14" ]]; then
+                CL_VARIANT="CL9 标准内核"
+                CL_STREAM="standard-5.14"
+            fi
+            ;;
+        10)
+            if [[ ${RUNNING_PKG} == "kernel" ]] && [[ ${KERNEL_BRANCH} == "6.12" ]]; then
+                CL_VARIANT="CL10 标准内核"
+                CL_STREAM="standard-6.12"
+            fi
+            ;;
+    esac
+
+    [[ -n ${CL_STREAM} ]]
+}
+
 # 发行版专属附加识别（例如 Oracle Linux 的 UEK / RHCK）
 distro_extra_detect() {
     KERNEL_FLAVOR=""
@@ -152,6 +279,13 @@ distro_extra_detect() {
     ORACLE_UEK_GEN=""
     SUSE_PRODUCT=""
     PRODUCT_KEY=""
+    CL_VARIANT=""
+    CL_STREAM=""
+    CL_IDENTITY_OK=1
+    CL_IDENTITY_REASON=""
+    CL_RELEASE_FILE=""
+    CL_RELEASE_PKG=""
+    CL_RPM_PRESENT=0
 
     case "${DISTRO_ID}" in
         oracle)
@@ -196,6 +330,14 @@ distro_extra_detect() {
         almalinux)
             KERNEL_FLAVOR="kernel"
             PRODUCT_KEY="almalinux"
+            ;;
+        cloudlinux)
+            PRODUCT_KEY="cloudlinux"
+            # 身份交叉确认：os-release + /etc/cloudlinux-release + cloudlinux-release RPM
+            cloudlinux_verify_identity || true
+            # 变体（CL7/CL7h/CL8/LTS/CL9/CL10）依赖运行内核包，
+            # 在 kernel_resolve_running 之后由 cloudlinux_detect_stream 判定。
+            KERNEL_FLAVOR=""
             ;;
         amazon | rhel | rocky | fedora)
             KERNEL_FLAVOR="kernel"

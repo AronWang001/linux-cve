@@ -29,7 +29,7 @@
 set -Eeuo pipefail
 
 REPO="AronWang001/linux-cve-2026-98432-fix"
-VERSION="1.2.0"
+VERSION="1.3.0"
 TAG="v${VERSION}"
 SRC_NAME="${REPO##*/}"
 TARBALL="https://github.com/${REPO}/archive/refs/tags/${TAG}.tar.gz"

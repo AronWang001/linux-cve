@@ -4,9 +4,9 @@
 
 检测 Linux 服务器当前运行的内核是否受 CVE-2026-98432 影响，并在已完成适配与核验的发行版上安装官方修复内核包。工具覆盖发行版识别、内核到软件包的映射、漏洞状态判定、内核安装与安装后复核，不修改业务配置，不自动重启服务器。
 
-自动修复仅覆盖 Debian 12/13 与 Amazon Linux 2/2023。Ubuntu 与 Red Hat Enterprise Linux 只做检测，官方尚未发布可确认的修复包。其余发行版只做识别与信息输出，不进入安装流程。具体状态见[发行版支持矩阵](#发行版支持矩阵)。
+自动修复仅覆盖 Debian 12/13 与 Amazon Linux 2/2023。Ubuntu、Red Hat Enterprise Linux 与 CloudLinux 只做检测：CloudLinux 的官方修复包已发布，但涉及灰度推送与订阅资格，工具只给出精确版本与渠道。其余发行版只做识别与信息输出，不进入安装流程。具体状态见[发行版支持矩阵](#发行版支持矩阵)。
 
-当前版本 v1.2.0，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本 v1.3.0，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 漏洞背景
 
@@ -33,7 +33,7 @@
 
 ## 系统要求
 
-- 操作系统：自动修复支持 Debian 12 (bookworm)、Debian 13 (trixie)、Amazon Linux 2、Amazon Linux 2023；检测支持 Ubuntu 20.04/22.04/24.04、RHEL 8/9/10；识别支持 Rocky Linux、AlmaLinux、Oracle Linux、Fedora、openSUSE Leap、SUSE Linux Enterprise、Arch Linux、Alpine Linux。发行版版本不在适配范围内时返回 `UNSUPPORTED`。
+- 操作系统：自动修复支持 Debian 12 (bookworm)、Debian 13 (trixie)、Amazon Linux 2、Amazon Linux 2023；检测支持 Ubuntu 20.04/22.04/24.04、RHEL 8/9/10 与 CloudLinux 7/7h/8/8 LTS/9/9 LTS/10（含标准内核与 `kernel-lts` 两条流）；识别支持 Rocky Linux、AlmaLinux、Oracle Linux、Fedora、openSUSE Leap、SUSE Linux Enterprise、Arch Linux、Alpine Linux。发行版版本不在适配范围内时返回 `UNSUPPORTED`。
 - 架构：自动修复会校验架构，Debian 仅 amd64，Amazon Linux 2/2023 为 x86_64 与 aarch64。检测与识别型发行版不做架构拦截，但仍要求运行内核能映射到发行版软件包。
 - 权限：需要 root。仅 `--list-distros` 可以普通用户执行。
 - 依赖：Bash 4.0 及以上、coreutils、`awk`、`sed`、`grep`、`tar`、`find`；发行版对应的包管理工具（`dpkg`/`apt-get`/`apt-cache`、`rpm`/`dnf`/`yum`、`apk`、`pacman`、`zypper`）；引导安装器额外需要 `curl` 与 `sha256sum`（或 `shasum`）。
@@ -44,7 +44,7 @@
 ### 一键执行
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh | sudo bash
 ```
 
 `install.sh` 是引导安装器，本身不修改系统：它把对应 Tag 的源码归档下载到临时目录，解包后从 Release 读取 `SHA256SUMS`，逐个校验 `fix.sh`、`install.sh`、`lib/*.sh`、`adapters/*.sh` 与 `data/*.yml`，全部通过后才以相同参数执行 `fix.sh`。检测完成后显示修复计划，输入 `Y` 确认才安装内核。确认提示从 `/dev/tty` 读取，管道执行也能正常交互；`sudo` 可能要求输入密码。
@@ -54,7 +54,7 @@ curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fi
 ### 只读检查
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh | sudo bash -s -- --check
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh | sudo bash -s -- --check
 ```
 
 只读取系统状态，不刷新包索引、不安装软件包、不修改配置。`--check` 约束的是检测与修复阶段，不影响 `install.sh` 自身的下载行为。本地包索引为空时，候选版本会显示为未知，需要先自行执行 `apt-get update` 或 `dnf makecache`。
@@ -62,7 +62,7 @@ curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fi
 ### 免交互执行
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh | sudo bash -s -- --yes
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh | sudo bash -s -- --yes
 ```
 
 `--yes` 只跳过确认提示，不跳过发行版白名单、公告核验与版本校验。非白名单发行版即使指定 `--yes` 也不会进入安装流程。
@@ -70,7 +70,7 @@ curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fi
 ### 下载后审查再执行
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh
+curl -fsSLO https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh
 less install.sh
 sudo bash install.sh --check
 sudo bash install.sh
@@ -81,7 +81,7 @@ sudo bash install.sh
 `fix.sh` 依赖同目录的 `lib/`、`adapters/` 与 `data/`，不能单独下载使用：
 
 ```bash
-git clone --branch v1.2.0 --depth 1 https://github.com/AronWang001/linux-cve-2026-98432-fix.git
+git clone --branch v1.3.0 --depth 1 https://github.com/AronWang001/linux-cve-2026-98432-fix.git
 cd linux-cve-2026-98432-fix
 sudo bash fix.sh --check
 sudo bash fix.sh
@@ -93,11 +93,11 @@ sudo bash fix.sh
 
 ```bash
 mkdir -p /tmp/cve-verify && cd /tmp/cve-verify
-base=https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v1.2.0
+base=https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v1.3.0
 curl -fsSLO "${base}/SHA256SUMS"
-curl -fsSL -o src.tar.gz https://github.com/AronWang001/linux-cve-2026-98432-fix/archive/refs/tags/v1.2.0.tar.gz
+curl -fsSL -o src.tar.gz https://github.com/AronWang001/linux-cve-2026-98432-fix/archive/refs/tags/v1.3.0.tar.gz
 tar -xzf src.tar.gz
-cd linux-cve-2026-98432-fix-1.2.0
+cd linux-cve-2026-98432-fix-1.3.0
 sha256sum -c ../SHA256SUMS
 ```
 
@@ -114,6 +114,7 @@ sha256sum -c ../SHA256SUMS
 | `--list-distros` | 输出支持矩阵：检测支持、自动修复支持、官方补丁状态、核验日期。不需要 root |
 | `--report [文件]` | 生成检测报告，默认写入当前目录的 `cve-2026-98432-report-<时间戳>.txt`；报告不含密码、令牌与私钥 |
 | `--no-color` | 禁用彩色输出，适合日志采集 |
+| `--allow-staged-rollout` | 仅 CloudLinux：表示已知悉官方灰度旁路 `cloudlinux-rollout-3-bypass` 的风险。不会默认启用该仓库，也不写入 repo 文件；本版 CloudLinux 仅检测，指定后也不会安装 |
 | `-h`, `--help` | 显示帮助 |
 | `-V`, `--version` | 显示版本信息 |
 
@@ -126,6 +127,7 @@ sha256sum -c ../SHA256SUMS
 | `VULNERABLE_PATCH_AVAILABLE` | 官方修复包可用，运行内核仍受影响 | 2 |
 | `PATCH_NOT_RELEASED` | 官方尚未发布可确认的修复包，只输出状态，不安装 | 6 |
 | `PATCH_TESTING_ONLY` | 官方仅在 testing 仓库提供修复包，生产仓库未发布，不安装 | 7 |
+| `NOT_AFFECTED` | 官方说明该内核分支不含漏洞代码，无需操作 | 8 |
 | `UNKNOWN` | 公告、内核来源、包映射或版本无法确认 | 4 |
 | `UNSUPPORTED` | 系统、版本、架构或内核 flavor 不受支持 | 1 |
 | 用户取消 | 确认阶段输入非 `y`，系统未做修改 | 5 |
@@ -145,7 +147,7 @@ sudo reboot
 
 ## 发行版支持矩阵
 
-基线核验日期为 2026-11-01。数据来自各发行版官方公告与安全追踪器，人工核对后写入 `data/cve-2026-98432.yml`，不是实时在线同步。执行 `sudo bash fix.sh --list-distros` 可查看工具内置的当前状态，普通用户直接执行 `bash fix.sh --list-distros` 也可以。
+基线核验日期为 2026-11-02。数据来自各发行版官方公告与安全追踪器，人工核对后写入 `data/cve-2026-98432.yml`，不是实时在线同步。执行 `sudo bash fix.sh --list-distros` 可查看工具内置的当前状态，普通用户直接执行 `bash fix.sh --list-distros` 也可以。
 
 ### 自动检测与自动修复
 
@@ -186,14 +188,33 @@ Debian 12 的 `6.12.113-1~deb12u1` 是回移版本，不与 Debian 13 的 `6.12.
 | AlmaLinux 8 | 4.18 | `kernel` | `4.18.0-553.180.2.el8_10`（testing） | [AlmaLinux 公告](https://almalinux.org/blog/2026-10-30-cve-2026-98432/) | 仅测试仓库 |
 | AlmaLinux 9 | 5.14 | `kernel` | `5.14.0-687.61.2.el9_8`（testing） | [AlmaLinux 公告](https://almalinux.org/blog/2026-10-30-cve-2026-98432/) | 仅测试仓库 |
 | AlmaLinux 10 | 6.12 | `kernel` | `6.12.0-211.69.2.el10_2`（testing） | [AlmaLinux 公告](https://almalinux.org/blog/2026-10-30-cve-2026-98432/) | 仅测试仓库 |
+| CloudLinux 7h（Hybrid） | 4.18 | `kernel` | `4.18.0-553.180.1.lve.1` | [CloudLinux 公告](https://blog.cloudlinux.com/cve-2026-98432-linux-kernel-ipv4-tcp-flaw-status-for-cloudlinux) | 仅检测，staged rollout |
+| CloudLinux 8 | 4.18 | `kernel` | `4.18.0-553.180.1.lve.1` | [CloudLinux 公告](https://blog.cloudlinux.com/cve-2026-98432-linux-kernel-ipv4-tcp-flaw-status-for-cloudlinux) | 仅检测，staged rollout |
+| CloudLinux 8 LTS | 5.14 | `kernel-lts` | `5.14.0-284.1101.el8.tuxcare.11.els19` | CloudLinux 公告 Stream 3 | 仅检测，需 TuxCare ELS 订阅 |
+| CloudLinux 9 LTS | 5.14 | `kernel-lts` | `5.14.0-284.1101.el9.tuxcare.11.els19` | CloudLinux 公告 Stream 3 | 仅检测，需 TuxCare ELS 订阅 |
+| CloudLinux 9 | 5.14 | `kernel` | `5.14.0-687.61.2.el9_8`（testing） | CloudLinux 公告 Stream 2 | 仅测试仓库 |
+| CloudLinux 10 | 6.12 | `kernel` | `6.12.0-211.69.2.el10_2`（testing） | CloudLinux 公告 Stream 2 | 仅测试仓库 |
 
 补充说明：
 
 - Oracle Linux 的 UEKR6、UEKR7、UEKR8 是三条独立基线，`el7uek`、`el8uek`、`el9uek`、`el10uek` 后缀不能互换。OL8 与 OL9 各自同时存在两个代际，工具按运行内核的实际分支选择。RHCK 没有独立勘误，保持 `UNKNOWN`。
 - SUSE 的 `kernel-default-base` 完整 EVR 与 `kernel-default` 不同，例如 SLES 16.0 为 `6.12.0-160000.40.1.160000.2.30`，工具按运行内核实际包名匹配，不共用短 EVR。
-- SLES 15 SP7 的官方「List of released packages」列出了 `kernel-default >= 6.4.0-150700.53.90.1`，但同一页面的状态表仍为 `In progress`，两者矛盾，工具按 `UNKNOWN` 处理，不把它当作已发布修复。
+- SLES 15 SP7 的官方页面把 `kernel-default >= 6.4.0-150700.53.90.1` 列在「List of packages in QA」，状态表仍为 `In progress`，也没有对应的 SUSE-SU 公告，因此工具按 `UNKNOWN` 处理，不把它当作已发布修复。
 - AlmaLinux 的 testing 内核需要手动启用 `almalinux-testing` 仓库，官方明确说明社区验证后才进入生产仓库。工具不会启用该仓库，状态为 `PATCH_TESTING_ONLY`（退出码 7）。
+- CloudLinux 采用 staged rollout：官方已发布修复包不等于本实例的仓库已经收到。工具会只读查询当前仓库候选版本，未到达时提示「官方已发布，但当前实例尚未进入 staged rollout」，不会安装。
+- CloudLinux 标准内核 `kernel` 与 LTS 内核 `kernel-lts` 是两条流，EVR 完全不同；CL9 的标准内核与 LTS 内核同为 5.14，必须靠包名区分，不能只看 `uname -r` 的版本号。
+- CloudLinux 的 `cloudlinux-rollout-3-bypass` 是官方灰度旁路，工具不默认启用、不写入 repo 文件；`--allow-staged-rollout` 只做风险提示，本版不会据此执行安装。
+- CloudLinux 8/9 LTS 属于 TuxCare ELS，需要有效订阅与仓库资格；工具不判断授权状态，无候选包时只给出官方 EVR 与渠道。
+- CloudLinux 9/10 的标准内核修复包只在 AlmaLinux testing，工具不会安装 `almalinux-release-testing`，也不会执行 `dnf update 'kernel*'`。
 - 以上发行版的自动修复开关全部为 `no`，`--yes` 不能绕过。
+
+### 官方声明不受影响
+
+| 发行版 | 内核分支 | 内核包 | 官方依据 | 状态 |
+| --- | --- | --- | --- | --- |
+| CloudLinux 7（标准内核） | 3.10 | `kernel` | 官方公告：漏洞代码从 Linux 4.4 才引入，CL7 不受影响 | `NOT_AFFECTED`，退出码 8 |
+
+CloudLinux 7 的 3.10 内核不含漏洞代码，无需安装与重启。工具不会把 CloudLinux 7h 的 4.18 内核装到 CL7 上：CL7h 必须由运行内核分支 4.18 与 `kernel` 包共同确认，才按 7h 判定。
 
 ### 仅检测：官方尚未发布修复包
 
@@ -217,6 +238,7 @@ Debian 12 的 `6.12.113-1~deb12u1` 是回移版本，不与 Debian 13 的 `6.12.
 | Fedora Linux | 稳定仓库已有 7.2.13/7.2.14，但未从官方构建记录确认包含上游修复提交 `26d4c36` |
 | Arch Linux | Core 为 7.2.11，高于上游 7.2.10 修复点，但未核对打包源码；安全更新通常需要 `pacman -Syu` 全系统升级 |
 | Alpine Linux | secdb 中无该 CVE 记录，且 `linux-lts`、`linux-virt`、`linux-edge` 不可混为一谈 |
+| CloudLinux for Ubuntu 22.04 | 内核来自 Canonical（apt），官方修复仍在进行中；工具不做 RPM 判定，也不安装 |
 
 这些系统会输出发行版、版本、架构、运行内核、对应内核软件包与官方公告入口，状态为 `UNKNOWN`（退出码 4），不进入安装路径。
 
@@ -238,7 +260,7 @@ Debian 12 的 `6.12.113-1~deb12u1` 是回移版本，不与 Debian 13 的 `6.12.
 2. 规范化架构，并与包管理器报告的架构交叉核对。
 3. 将运行内核映射到已安装的内核软件包，读取其版本。
 4. 查询 `data/cve-2026-98432.yml` 中对应的核验记录，取得修复版本、公告编号与是否允许自动修复。
-5. 用对应包管理器的版本语义比较运行内核与修复版本，输出七种状态之一。
+5. 用对应包管理器的版本语义比较运行内核与修复版本，输出八种状态之一。
 
 ### 修复步骤
 
@@ -284,26 +306,27 @@ Debian 12 的 `6.12.113-1~deb12u1` 是回移版本，不与 Debian 13 的 `6.12.
 | `tests/test_version.sh` | 5 | RPM EVR（epoch、release、`~`）、apk 修订号与后缀、pacman、dpkg 回移版本、未知版本家族 |
 | `tests/test_safety.sh` | 8 | 非白名单发行版指定 `--yes` 也不安装、`--check` 只读、`--report` 无副作用、适配层能力声明完整、白名单最小化、静态扫描 |
 | `tests/test_new_distros.sh` | 14 | Oracle UEKR6/R7/R8 与 RHCK 拒绝、SUSE 产品/SP/flavor 精确匹配、SP7 状态冲突、SLE Micro 事务式更新、AlmaLinux testing 与 `--yes` 不可绕过 |
-| `tests/test_baseline.sh` | 7 | 基线静态检查：ID 与组合键唯一、EVR 与公告完整、通配记录不得声明 fixed、`autofix=yes` 的验证证据 |
+| `tests/test_baseline.sh` | 8 | 基线静态检查：ID 与组合键唯一、EVR 与公告完整、通配记录不得声明 fixed、`not_affected` 不得带修复版本、`autofix=yes` 的验证证据 |
 | `tests/test_installer.sh` | 7 | 整包校验：哈希不符、清单缺失、路径穿越、归档成员异常、正常清单通过 |
+| `tests/test_cloudlinux.sh` | 17 | CL7 3.10 不受影响、CL7h/CL8 4.18 与 staged rollout、CL8/9 LTS 的 `kernel-lts`、CL9/10 仅 testing、身份交叉校验、CloudLinux for Ubuntu、`--allow-staged-rollout` 不启用 bypass、`--check` 只读 |
 
-合计 94 个用例。
+合计 112 个用例。
 
 与 v1.1.2 相比，`tests/test_detection.sh` 有 4 个用例的预期结果被更新：AlmaLinux 9.4 由 `4` 改为 `7`，Oracle Linux 9.4 UEKR7 与 SLES 15 SP5 由 `4` 改为 `2`（这三组在本版有了确定结论，不再是 `UNKNOWN`）；D12 不再是「SUSE 15.5 判 `UNKNOWN`」，改为 SLES 15 SP7 官方状态矛盾的场景。用例与断言都没有删除，净增 6 条断言；但套件全绿只代表当前预期成立，不能用来证明 v1.1.2 的旧 `UNKNOWN` 预期仍然通过。
 
 ### 测试环境
 
 - 本地：Windows + Git Bash，构造假根目录并注入 `dpkg`、`apt-get`、`rpm`、`dnf`、`yum`、`apk`、`pacman`、`uname` 的模拟实现。
-- CI：GitHub Actions 执行 8 个测试套件与 ShellCheck 0.11.0（`-S style -x`），另有 12 个发行版容器的只读识别冒烟任务。
+- CI：GitHub Actions 执行 9 个测试套件与 ShellCheck 0.11.0（`-S style -x`），另有 12 个发行版容器的只读识别冒烟任务。
 - 容器冒烟覆盖：Debian 12/13、Ubuntu 22.04/24.04、Rocky Linux 9、AlmaLinux 9、Fedora、openSUSE Leap 15.6、Alpine 3.20、Arch Linux、Amazon Linux 2/2023。
 
 ### 测试未覆盖的部分
 
-测试使用模拟的包管理器输出，验证判定逻辑、安装流程与失败处理，不执行真实内核安装。容器冒烟只验证发行版识别与容器内的拒绝行为（`UNKNOWN`），不验证内核升级、initramfs 生成、引导项更新与重启后生效。Amazon Linux 的完整流程未在真实 AWS 实例上执行过。
+测试使用模拟的包管理器输出，验证判定逻辑、安装流程与失败处理，不执行真实内核安装。容器冒烟只验证发行版识别与容器内的拒绝行为（`UNKNOWN`），不验证内核升级、initramfs 生成、引导项更新与重启后生效。Amazon Linux 的完整流程未在真实 AWS 实例上执行过。CloudLinux、Oracle Linux、SUSE/openSUSE 与 AlmaLinux 的基线同样只在模拟环境验证：没有在真实实例上完成「安装 → 引导项检查 → 重启 → 复核」，因此这些记录的 `autofix` 保持 `no`。容器冒烟也没有覆盖 CloudLinux，其官方镜像需要订阅凭据，无法在公开 CI 中拉取。
 
 ## 已知限制
 
-1. 自动修复仅覆盖 Debian 12/13 与 Amazon Linux 2/2023。Oracle Linux UEK、SUSE/openSUSE、AlmaLinux 只做检测与状态展示，基线中的 `autofix` 全部为 `no`。
+1. 自动修复仅覆盖 Debian 12/13 与 Amazon Linux 2/2023。Oracle Linux UEK、SUSE/openSUSE、AlmaLinux、CloudLinux 只做检测与状态展示，基线中的 `autofix` 全部为 `no`。
 2. 新增的 Oracle Linux、SUSE/openSUSE、AlmaLinux 基线未在真实虚拟机或云主机完成「安装 → 引导项检查 → 重启 → 重新检测为 `FIXED`」验证。容器与模拟测试不能替代实机验证，因此不启用自动修复。
 3. Oracle Linux 7 的 UEKR6 修复包位于 `ol7_x86_64_UEKR6_ELS` 频道，需要有效的 ELS 订阅；工具不判断订阅状态，只展示官方 EVR 与频道。
 4. SUSE 的 LTSS 基线需要对应的 LTSS 订阅与仓库资格，仓库不可见时无法安装；`kernel-default`、`kernel-default-base`、`kernel-azure`、`kernel-rt`、`kernel-64kb`、`kernel-kvmsmall` 各自独立，未单独记录的 flavor 返回 `UNKNOWN`。
@@ -317,6 +340,10 @@ Debian 12 的 `6.12.113-1~deb12u1` 是回移版本，不与 Debian 13 的 `6.12.
 12. RPM 系与 SUSE 不自动重建引导配置，启动项缺失时停止并给出人工命令。
 13. 发行版衍生关系不继承结论，Rocky Linux、AlmaLinux、Oracle Linux 不使用 RHEL 的判定结果，RHCK 不使用 UEK 的判定结果。
 14. 基线更新需要人工核对官方公告后提交，工具本身不抓取公告。
+15. CloudLinux 的 staged rollout 通过 `dnf repoquery` 只读查询当前仓库候选版本；查询失败时判为「无法确认 rollout」，只提示不安装。
+16. CloudLinux 8/9 LTS 的 `kernel-lts` 属于 TuxCare ELS，需要有效订阅；工具不添加 TuxCare 源，也不从外部 URL 下载 RPM。
+17. `cloudlinux-rollout-3-bypass` 没有被实现为自动安装路径：即使指定 `--allow-staged-rollout`，本版也不会执行 `yum`、不会启用该仓库，也不会写入 repo 文件。
+18. CloudLinux 7 的 3.10 判定为 `NOT_AFFECTED` 依据官方公告；若机器上运行的是非官方内核，仍会因无法映射到 `kernel` 包而返回 `UNKNOWN`。
 
 ## 常见问题
 
@@ -353,11 +380,11 @@ lib/
   kernel.sh                 运行内核与软件包的映射
   package_manager.sh        apt、dnf、yum、zypper 抽象
   install.sh                计划输出、安装、安装后校验、重启提示
-  status.sh                 七态状态机
+  status.sh                 八态状态机（含 NOT_AFFECTED）
   report.sh                 --list-distros 与 --report
-adapters/                   11 个发行版适配文件，声明身份、版本范围与能力
+adapters/                   12 个发行版适配文件，声明身份、版本范围与能力
 data/cve-2026-98432.yml     核验后的官方修复基线（含产品、内核流、flavor、仓库渠道）
-tests/                      8 个测试套件、模拟实现与容器冒烟脚本
+tests/                      9 个测试套件、模拟实现与容器冒烟脚本
 ```
 
 ## 许可证

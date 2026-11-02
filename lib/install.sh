@@ -357,6 +357,24 @@ check_bootloader() {
 # 重启提示
 # ---------------------------------------------------------------------------
 
+print_staged_rollout_notice() {
+    [[ ${CL_ALLOW_ROLLOUT:-0} -eq 1 ]] || return 0
+
+    if [[ ${DISTRO_ID} != "cloudlinux" ]]; then
+        log_warn "--allow-staged-rollout 仅适用于 CloudLinux，当前系统为 ${ADAPTER_NAME:-未知}，已忽略该参数。"
+        return 0
+    fi
+
+    printf '\n%s关于 --allow-staged-rollout%s\n' "${C_BOLD}" "${C_RESET}"
+    printf '  你已明确表示知悉 CloudLinux 官方灰度旁路（cloudlinux-rollout-3-bypass）的风险：\n'
+    printf '  * 该仓库会把尚未完成分批推送的内核提前暴露给本机，可能缺少针对部分机型与驱动的验证；\n'
+    printf '  * 官方建议先执行 yum update cloudlinux-release，再按灰度节奏升级内核并人工重启；\n'
+    printf '  * 该仓库只能单次启用，本工具不会写入 repo 文件，也不会永久启用它。\n'
+    printf '\n  %s本版 CloudLinux 仅做检测（未完成实机安装与重启验证），因此不会执行 yum，%s\n' \
+        "${C_YELLOW}" "${C_RESET}"
+    printf '  %s也不会启用该仓库或安装任何内核。%s\n\n' "${C_YELLOW}" "${C_RESET}"
+}
+
 print_reboot_notice() {
     printf '\n%s────────────────────────────────────────────────────────%s\n' "${C_BOLD}" "${C_RESET}"
     printf '%s 修复结果%s\n' "${C_BOLD}" "${C_RESET}"
