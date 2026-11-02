@@ -27,6 +27,28 @@ arch_in_list() {
     return 1
 }
 
+# CloudLinux staged rollout：官方采用分批推送，即使公告已发布修复包，
+# 本实例的官方仓库也可能还没拿到。查询只读，不刷新索引、不改仓库配置。
+# 结果写入 CL_ROLLOUT_STATE：reached / pending / unknown
+cloudlinux_check_rollout() {
+    local cand=""
+
+    CL_ROLLOUT_STATE="unknown"
+    CL_ROLLOUT_CAND=""
+
+    have rpm || return 0
+    if ! cand="$(rpm_candidate "${BASELINE_PACKAGE:-kernel}")"; then
+        return 0
+    fi
+    CL_ROLLOUT_CAND="${cand}"
+    if version_ge_family "rpm" "${cand}" "${FIXED_VERSION}"; then
+        CL_ROLLOUT_STATE="reached"
+    else
+        CL_ROLLOUT_STATE="pending"
+    fi
+    return 0
+}
+
 assess() {
     STATUS=""
     STATUS_REASON=""
@@ -49,11 +71,24 @@ assess() {
     BASELINE_TESTED_INSTALL=""
     BASELINE_TESTED_REBOOT=""
     BASELINE_PROCEDURE=""
+    # CloudLinux 变体与内核流由 fix.sh 在 kernel_resolve_running 之后写入，
+    # 这里只做「未赋值时补空」，不能在判定开始时清空，否则输出会丢掉变体信息。
+    : "${CL_VARIANT:=}"
+    : "${CL_STREAM:=}"
+    CL_ROLLOUT_STATE=""
+    CL_ROLLOUT_CAND=""
 
     # 1) 发行版身份
     if [[ -z ${DISTRO_FAMILY} ]] || [[ ${ADAPTER_DETECT_SUPPORTED:-0} -ne 1 ]]; then
         STATUS="${ST_UNSUPPORTED}"
         STATUS_REASON="当前系统 ${OS_PRETTY}（ID=${OS_ID:-未知}）不在本工具支持的发行版列表中，已停止，未做任何修改。"
+        return 0
+    fi
+
+    # 1b) CloudLinux 身份交叉校验失败：宁可不判定，也不套用 RHEL/Ubuntu 的结论
+    if [[ ${DISTRO_ID} == "cloudlinux" ]] && [[ ${CL_IDENTITY_OK:-1} -ne 1 ]]; then
+        STATUS="${ST_UNKNOWN}"
+        STATUS_REASON="CloudLinux 身份无法交叉确认：${CL_IDENTITY_REASON}"
         return 0
     fi
 
@@ -118,6 +153,11 @@ assess() {
     case "${BASE_STATUS}" in
         fixed)
             ;;
+        not_affected)
+            STATUS="${ST_NOT_AFFECTED}"
+            STATUS_REASON="官方说明该内核分支不受 ${CVE_ID} 影响（${ADVISORY}，核验日期 ${BASELINE_VERIFIED}）：${BASELINE_NOTE}"
+            return 0
+            ;;
         testing)
             STATUS="${ST_TESTING}"
             STATUS_REASON="官方仅在 testing 仓库提供修复包（${ADVISORY}，核验日期 ${BASELINE_VERIFIED}）：${BASELINE_NOTE}"
@@ -134,6 +174,11 @@ assess() {
             return 0
             ;;
     esac
+
+    # 7b) CloudLinux staged rollout：官方已发布不等于本实例可获取。
+    if [[ ${DISTRO_ID} == "cloudlinux" ]] && [[ ${BASELINE_ADV_STATUS} == "staged_rollout" ]]; then
+        cloudlinux_check_rollout
+    fi
 
     # 8) 版本判定
     if version_ge_family "${DISTRO_FAMILY}" "${RUNNING_VERSION}" "${FIXED_VERSION}"; then
@@ -156,9 +201,31 @@ assess() {
     STATUS="${ST_VULN_FIXABLE}"
     STATUS_REASON="当前运行内核软件包版本 ${RUNNING_VERSION} 低于官方修复版本 ${FIXED_VERSION}（分支 ${KERNEL_BRANCH}）。"
 
+    # CloudLinux：区分「官方已发布」「本实例已收到推送」「无法确认」三种情况，
+    # 未收到推送或无法确认时绝不安装，也不启用 rollout bypass。
+    if [[ ${DISTRO_ID} == "cloudlinux" ]] && [[ ${BASELINE_ADV_STATUS} == "staged_rollout" ]]; then
+        case "${CL_ROLLOUT_STATE}" in
+            pending)
+                STATUS_REASON="官方已发布修复包 ${FIXED_VERSION}，但当前实例尚未进入 staged rollout（官方仓库候选 ${CL_ROLLOUT_CAND:-未知}）。本工具不会启用 rollout bypass，也不会安装任何软件。"
+                ;;
+            unknown)
+                STATUS_REASON="官方已发布修复包 ${FIXED_VERSION}，但无法确认当前实例是否已收到 staged rollout 推送（仓库元数据不可用或查询失败）。本工具不会安装任何软件。"
+                ;;
+            *)
+                STATUS_REASON="当前运行内核软件包版本 ${RUNNING_VERSION} 低于官方修复版本 ${FIXED_VERSION}（分支 ${KERNEL_BRANCH}），官方仓库候选 ${CL_ROLLOUT_CAND:-未知} 已达标。"
+                ;;
+        esac
+    fi
+
     # 自动修复需要三重条件：适配器默认允许、基线显式 autofix、严格模式下
     # 还必须具备真实安装与重启验证记录（容器/模拟测试不算）。
-    if [[ ${ADAPTER_AUTOFIX_DEFAULT} -eq 1 ]] && [[ ${BASELINE_AUTOFIX} == "yes" ]]; then
+    # CloudLinux 额外要求本实例的 rollout 已真正推送，否则不得安装。
+    local rollout_ok=1
+    if [[ ${DISTRO_ID} == "cloudlinux" ]] && [[ ${BASELINE_ADV_STATUS} == "staged_rollout" ]] &&
+        [[ ${CL_ROLLOUT_STATE} != "reached" ]]; then
+        rollout_ok=0
+    fi
+    if [[ ${rollout_ok} -eq 1 ]] && [[ ${ADAPTER_AUTOFIX_DEFAULT} -eq 1 ]] && [[ ${BASELINE_AUTOFIX} == "yes" ]]; then
         if [[ ${ADAPTER_STRICT_BASELINE:-0} -ne 1 ]] ||
             { [[ ${BASELINE_TESTED_INSTALL} == "yes" ]] && [[ ${BASELINE_TESTED_REBOOT} == "yes" ]]; }; then
             AUTOFIX=1
@@ -183,9 +250,19 @@ print_assessment() {
     kv "官方依据" "${ADVISORY:-未知}${BASELINE_FAMILY:+（${BASELINE_FAMILY} 包管理）}"
     kv "基线核对" "${BASELINE_VERIFIED:-未核验} · ${ADVISORY_URL:-${ADAPTER_ADVISORY_URL:-}}"
     kv "内核分支" "${KERNEL_BRANCH}"
+    if [[ -n ${CL_VARIANT} ]]; then
+        kv "CloudLinux" "${CL_VARIANT}"
+    fi
     kv "修复版本" "${FIXED_VERSION:-未知}"
     if [[ -n ${BASELINE_CHANNEL} ]]; then
         kv "仓库渠道" "${BASELINE_CHANNEL}"
+    fi
+    if [[ -n ${CL_ROLLOUT_STATE} ]]; then
+        case "${CL_ROLLOUT_STATE}" in
+            reached) kv "Rollout" "已推送到本实例（候选 ${CL_ROLLOUT_CAND}）" ;;
+            pending) kv "Rollout" "尚未推送到本实例（候选 ${CL_ROLLOUT_CAND:-未知}）" ;;
+            *) kv "Rollout" "无法确认（仓库元数据不可用）" ;;
+        esac
     fi
     # SUSE Micro 等产品必须走 transactional-update，普通 zypper 安装流程不适用；
     # 这类信息必须显式告知用户，否则「有修复包」会被误解为「可以直接装」。
@@ -199,6 +276,9 @@ print_assessment() {
     case "${STATUS}" in
         "${ST_FIXED}")
             printf '  %s判定结果：已修复%s\n' "${C_GREEN}${C_BOLD}" "${C_RESET}"
+            ;;
+        "${ST_NOT_AFFECTED}")
+            printf '  %s判定结果：不受影响%s\n' "${C_GREEN}${C_BOLD}" "${C_RESET}"
             ;;
         "${ST_PENDING}")
             printf '  %s判定结果：待重启%s\n' "${C_YELLOW}${C_BOLD}" "${C_RESET}"

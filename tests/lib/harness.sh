@@ -268,6 +268,19 @@ h_flag() {
     : >"${SCEN}/state/flags/$1"
 }
 
+# 临时隐藏某个模拟命令（例如验证「没有 rpm 数据库」的 CloudLinux 场景）
+h_hide_cmd() {
+    local name="$1"
+    [[ -f "${MOCKBIN}/${name}" ]] || return 1
+    mv "${MOCKBIN}/${name}" "${MOCKBIN}/.${name}.hidden"
+}
+
+h_show_cmd() {
+    local name="$1"
+    [[ -f "${MOCKBIN}/.${name}.hidden" ]] || return 1
+    mv "${MOCKBIN}/.${name}.hidden" "${MOCKBIN}/${name}"
+}
+
 h_run() {
     OUT="$(
         cd "${SCEN}" &&

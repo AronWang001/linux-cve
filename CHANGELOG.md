@@ -2,6 +2,60 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.3.0] - 2026-11-02
+
+新增 CloudLinux 7/7h/8/8 LTS/9/9 LTS/10 的检测基线，并新增 `NOT_AFFECTED` 状态（退出码 `8`）与 `--allow-staged-rollout` 参数。同时重新核验 Oracle Linux UEK、SUSE/openSUSE 与 AlmaLinux 的官方页面，修正 v1.2.0 中关于 SLES 15 SP7 的表述错误。
+
+**自动修复范围未扩大**：CloudLinux 的 7 条记录全部为 `autofix: no`。官方修复包已发布，但涉及 staged rollout、TuxCare ELS 订阅资格与 testing 仓库，且未在真实实例完成「安装→引导项检查→重启→复核」验证，因此只做检测。
+
+### 新增
+
+- CloudLinux 适配层 `adapters/cloudlinux.sh`（第 12 个适配文件），按 2026-10-30 官方公告建立 7 条基线：
+  - `cloudlinux-7-standard-3.10`：CL7 标准内核 3.10，官方说明漏洞代码自 Linux 4.4 引入，状态 `not_affected`。
+  - `cloudlinux-7h-4.18`、`cloudlinux-8-standard-4.18`：`kernel` `4.18.0-553.180.1.lve.1`，`advisory_status: staged_rollout`。
+  - `cloudlinux-8-lts-5.14`、`cloudlinux-9-lts-5.14`：`kernel-lts` `5.14.0-284.1101.el8.tuxcare.11.els19` / `5.14.0-284.1101.el9.tuxcare.11.els19`（TuxCare ELS）。
+  - `cloudlinux-9-standard-5.14`、`cloudlinux-10-standard-6.12`：`5.14.0-687.61.2.el9_8`、`6.12.0-211.69.2.el10_2`，仅 AlmaLinux testing，状态 `testing`。
+- `NOT_AFFECTED` 状态与退出码 `8`：官方明确说明内核分支不含漏洞代码时使用，不安装、不重启，输出「判定结果：不受影响」。
+- CloudLinux 身份三重交叉校验 `cloudlinux_verify_identity()`：`/etc/os-release`、`/etc/cloudlinux-release`、`cloudlinux-release` 软件包主版本必须一致；缺少后两者或版本冲突时判 `UNKNOWN`，不套用 RHEL/Ubuntu 结论。无 RPM 数据库时识别为 CloudLinux for Ubuntu 22.04，只输出「由 Canonical 推进」。
+- CloudLinux 内核流判定 `cloudlinux_detect_stream()`：`kernel-lts` → `lts-els`；`7+3.10` → `standard-3.10`、`7+4.18` → `hybrid-4.18`、`8+4.18` → `standard-4.18`、`9+5.14` → `standard-5.14`、`10+6.12` → `standard-6.12`。CL9 的标准内核与 LTS 同为 5.14，只能靠包名区分。
+- staged rollout 只读查询 `cloudlinux_check_rollout()`：用 `rpm_candidate` 查询当前仓库候选，得出 `reached` / `pending` / `unknown` 三态；未到达时提示「官方已发布，但当前实例尚未进入 staged rollout」，任何状态都不安装。
+- `--allow-staged-rollout` 参数：仅在 CloudLinux 上输出 bypass 仓库的风险说明（可能缺少机型与驱动验证、只能单次启用、不写 repo 文件），非 CloudLinux 上提示「已忽略」。本版未实现实际安装路径，指定后也不会执行 `yum`。
+- 测试 `tests/test_cloudlinux.sh`（17 个用例）：CL7 3.10 不受影响、CL7h/CL8 独立识别、CL8/9 LTS 的独立 EVR、CL9/10 仅 testing、CloudLinux for Ubuntu、身份缺失与版本冲突、`--allow-staged-rollout` 不启用 bypass、`--yes` 不能绕过、`--check` 只读、`--list-distros` 标注。
+
+### 变更
+
+- `lib/advisory.sh`：字段去引号不再为每个字段 fork 子 shell（改为写入 `UNQUOTED`）。基线从 51 条增至 58 条后，单次检测在 Git Bash 下由约 62 秒降到约 11 秒，判定结果不变。
+- `lib/detect.sh`：新增 CloudLinux 身份与内核流识别；`normalize_release` 与 `adapter_file_for_id` 支持 `cloudlinux` / `cloudlinuxos`。
+- `lib/kernel.sh`：内核包识别补充 `kernel-lts`。
+- `lib/status.sh`：新增 CloudLinux 身份校验失败即 `UNKNOWN`、`not_affected` 状态映射、rollout 状态参与判定理由、`autofix` 增加 rollout 闸门；`CL_VARIANT` / `CL_STREAM` 改为「未赋值时补空」，避免判定开始时丢失变体信息。
+- `lib/report.sh`：`--list-distros` 与 `--report` 增加 CloudLinux 与 Rollout 行，状态标签补充「不受影响」。
+- `lib/install.sh`：新增 `print_staged_rollout_notice()`。
+- `fix.sh`：版本改为 `1.3.0`；新增 `--allow-staged-rollout` 解析与 `NOT_AFFECTED` 出口；帮助文本与 `--version` 同步 CloudLinux 与退出码 7/8。
+- `data/cve-2026-98432.yml`：51 条增至 58 条；Oracle Linux、SUSE、AlmaLinux、RHEL、Ubuntu 共 37 条记录的 `verified` 更新为 2026-11-02；`sles-15.7-unknown` 的 `notes` 改为「QA 列表有 6.4.0-150700.53.90.1，但 released 列表无 SP7 条目，状态表全部 In progress，也无 SUSE-SU 公告」，与官方页面一致。
+- `README.md` / `README.en.md`：补充 CloudLinux 支持矩阵、「官方声明不受影响」小节、staged rollout 与 bypass 风险、ELS 授权要求、退出码 8 与新参数；SLES 15 SP7 的描述同步修正；测试套件表与 CI 说明更新为 9 个套件 112 个用例。
+
+### 测试
+
+- 用例总数 112 个：v1.2.0 的 94 个 + 新增 18 个（`test_cloudlinux` 17、`test_baseline` 1）。
+- 原有 94 个用例全部保留，断言未删除、未放宽预期退出码；除下面两处说明外，`test.sh`、`test_detection.sh`、`test_amazon_linux.sh`、`test_new_distros.sh`、`test_safety.sh`、`test_installer.sh`、`test_version.sh` 未改动。
+- **`tests/test_baseline.sh` 有一处放宽**：`status` 合法值列表新增 `not_affected`，这是为新增状态放行，不是收紧校验；同一文件新增的用例会反过来检查 `not_affected` 记录不得带 `fixed_version`、不得允许自动修复、必须写明官方依据。
+- **`tests/test.sh` 第 14 个用例有一处断言更新**：`--version` 的期望字符串随版本号由 `1.2.0` 改为 `1.3.0`。这是每次发版都必须跟随的版本号断言，其余断言（`--help` 用法与退出码、非法参数）未改动。
+- `tests/lib/harness.sh` 新增 `h_hide_cmd` / `h_show_cmd`，用于模拟没有 RPM 数据库的 CloudLinux for Ubuntu 场景。
+- 容器冒烟不覆盖 CloudLinux：官方镜像需要订阅凭据，公开 CI 无法拉取，因此该发行版只有模拟测试与只读查询验证。
+
+### 已知限制
+
+- CloudLinux、Oracle Linux、SUSE/openSUSE、AlmaLinux 均未在真实虚拟机完成「安装→引导项检查→重启→复核」，`autofix` 保持 `no`。
+- CloudLinux 8/9 LTS 需要 TuxCare ELS 订阅；工具不添加 TuxCare 源，也不从外部 URL 下载 RPM。
+- `cloudlinux-rollout-3-bypass` 未接入安装路径，指定 `--allow-staged-rollout` 也不会启用；等实机验证完成后再评估。
+- SLES 15 SP7 仍为 `UNKNOWN`，冲突未消除。
+
+### 升级说明
+
+- 从 v1.2.0 升级无需修改配置，Debian/Amazon Linux 的判定与安装行为不变。
+- 新增退出码 `8`（`NOT_AFFECTED`），脚本化调用方需要按需处理；退出码 `7` 语义不变。
+- 新增参数 `--allow-staged-rollout`，不指定时行为与 v1.2.0 一致。
+
 ## [1.2.0] - 2026-11-01
 
 新增 Oracle Linux UEK、SUSE/openSUSE、AlmaLinux 的官方补丁基线，基线模型改为按产品/版本/内核流/flavor/架构/仓库渠道精确匹配。安装器改为整包 SHA256 校验。

@@ -5,11 +5,12 @@
 # 用途：识别当前 Linux 发行版与运行内核，判断 CVE-2026-98432 的官方修复状态，
 #       仅对「官方修复包已核验 + 适配完成 + 用户确认」的发行版执行内核更新。
 #
-# 支持策略（2026-11-01 核验）：
+# 支持策略（2026-11-02 核验）：
 #   * 自动检测 + 自动修复：Debian 12/13、Amazon Linux 2 / 2023
-#   * 仅检测（官方尚未修复）：Ubuntu 20.04/22.04/24.04、RHEL 8/9/10
-#   * 仅识别（未完成核验）：Rocky、AlmaLinux、Oracle Linux、Fedora、
-#     openSUSE/SUSE、Arch、Alpine
+#   * 仅检测（官方已发布修复包，未完成实机验证）：Oracle Linux UEK、
+#     SUSE/openSUSE、CloudLinux（含 LTS/ELS）、AlmaLinux（仅 testing）
+#   * 仅检测（官方尚未修复）：Ubuntu、RHEL
+#   * 仅识别：Rocky、Fedora、Arch、Alpine
 #
 # 设计原则：
 #   * 只使用发行版官方源或用户已配置的仓库，不新增第三方源
@@ -19,12 +20,13 @@
 #
 # 退出码：0 已修复 / 1 错误或不支持 / 2 存在漏洞 / 3 待重启
 #         4 无法确认 / 5 用户取消 / 6 官方尚未发布修复包
+#         7 官方仅在 testing 仓库提供补丁 / 8 该内核分支不受影响
 #
 # License: MIT
 
 set -Eeuo pipefail
 
-readonly SCRIPT_VERSION="1.2.0"
+readonly SCRIPT_VERSION="1.3.0"
 readonly SCRIPT_NAME="${0##*/}"
 readonly CVE_ID="CVE-2026-98432"
 readonly PROJECT_URL="https://github.com/AronWang001/linux-cve-2026-98432-fix"
@@ -134,6 +136,19 @@ BASELINE_FLAVORS=""
 # shellcheck disable=SC2034  # 跨文件使用的全局状态，由 lib/*.sh 与 fix.sh 共同读写
 BASELINE_ARCHES=""
 
+# CloudLinux（身份交叉校验 / 内核流 / staged rollout）
+# shellcheck disable=SC2034  # 跨文件使用的全局状态，由 lib/*.sh 与 fix.sh 共同读写
+CL_IDENTITY_OK=1
+CL_IDENTITY_REASON=""
+CL_RELEASE_FILE=""
+CL_RELEASE_PKG=""
+CL_RPM_PRESENT=0
+CL_VARIANT=""
+CL_STREAM=""
+CL_ROLLOUT_STATE=""
+CL_ROLLOUT_CAND=""
+CL_ALLOW_ROLLOUT=0
+
 # 判定
 STATUS=""
 STATUS_REASON=""
@@ -162,8 +177,8 @@ usage() {
 CVE-2026-98432 多发行版检测与修复工具（v${SCRIPT_VERSION}）
 
 检测支持：Debian 12/13、Ubuntu 20.04/22.04/24.04、Amazon Linux 2/2023、
-          RHEL 8/9/10、Rocky、AlmaLinux、Oracle Linux、Fedora、
-          openSUSE/SUSE、Arch Linux、Alpine Linux
+          RHEL 8/9/10、Rocky、AlmaLinux、Oracle Linux、CloudLinux（含 LTS/ELS）、
+          Fedora、openSUSE/SUSE、Arch Linux、Alpine Linux
 自动修复：仅 Debian 12/13 与 Amazon Linux 2/2023（官方修复包已核验）
 
 选项:
@@ -174,6 +189,10 @@ CVE-2026-98432 多发行版检测与修复工具（v${SCRIPT_VERSION}）
       --no-color       禁用彩色输出
       --list-distros   显示各发行版的检测/自动修复支持与官方补丁状态
       --report [文件]  生成检测报告（不修改系统），默认写入当前目录
+      --allow-staged-rollout
+                       仅 CloudLinux：表示已知悉官方灰度旁路
+                       （cloudlinux-rollout-3-bypass）的风险。该仓库不会被默认启用，
+                       也不会写入 repo 文件；本版 CloudLinux 仅检测，指定后也不会安装。
 
 退出码:
   0  已修复：当前运行内核已达到官方修复版本
@@ -183,6 +202,8 @@ CVE-2026-98432 多发行版检测与修复工具（v${SCRIPT_VERSION}）
   4  无法确认：公告、内核来源、包映射或版本无法确认
   5  用户取消：未做任何修改
   6  官方尚未发布可确认的修复包（仅检测，不安装）
+  7  官方仅在 testing 仓库提供补丁（不启用 testing 源，不安装）
+  8  当前内核分支不受该漏洞影响（无需操作）
 
 示例:
   sudo bash ${SCRIPT_NAME} --check          # 只体检，不改动系统
@@ -198,7 +219,7 @@ version_info() {
     printf '%s %s\n' "${SCRIPT_NAME}" "${SCRIPT_VERSION}"
     printf 'CVE: %s\n' "${CVE_ID}"
     printf '自动修复: Debian 12/13, Amazon Linux 2/2023\n'
-    printf '仅检测: Ubuntu, RHEL, Rocky, AlmaLinux, Oracle Linux, Fedora, SUSE, Arch, Alpine\n'
+    printf '仅检测: Ubuntu, RHEL, Rocky, AlmaLinux, Oracle Linux, CloudLinux, Fedora, SUSE, Arch, Alpine\n'
     printf '项目: %s\n' "${PROJECT_URL}"
 }
 
@@ -224,6 +245,9 @@ parse_args() {
                 ;;
             --list-distros)
                 MODE="list"
+                ;;
+            --allow-staged-rollout)
+                CL_ALLOW_ROLLOUT=1
                 ;;
             --report)
                 MODE="report"
@@ -416,6 +440,7 @@ report_status_exit() {
         "${ST_VULN_FIXABLE}") printf '%s\n' "${EX_VULNERABLE}" ;;
         "${ST_NOT_RELEASED}") printf '%s\n' "${EX_PATCH_NOT_RELEASED}" ;;
         "${ST_TESTING}") printf '%s\n' "${EX_PATCH_TESTING_ONLY}" ;;
+        "${ST_NOT_AFFECTED}") printf '%s\n' "${EX_NOT_AFFECTED}" ;;
         "${ST_UNSUPPORTED}") printf '%s\n' "${EX_ERROR}" ;;
         *) printf '%s\n' "${EX_UNKNOWN}" ;;
     esac
@@ -450,6 +475,9 @@ main() {
     fi
 
     kernel_resolve_running || true
+    if [[ ${DISTRO_ID} == "cloudlinux" ]]; then
+        cloudlinux_detect_stream || true
+    fi
     detect_reboot_flags
     detect_pm_sources
     detect_newest_installed || true
@@ -457,6 +485,7 @@ main() {
     print_environment
     assess
     print_assessment
+    print_staged_rollout_notice
 
     if [[ ${MODE} == "report" ]]; then
         if [[ -z ${REPORT_PATH} ]]; then
@@ -470,6 +499,11 @@ main() {
         "${ST_FIXED}")
             printf '\n%s无需操作：当前运行内核已包含该漏洞的修复。%s\n\n' "${C_GREEN}" "${C_RESET}"
             exit "${EX_OK}"
+            ;;
+        "${ST_NOT_AFFECTED}")
+            printf '\n%s当前运行的内核分支不受 %s 影响，无需安装或重启。%s\n\n' \
+                "${C_GREEN}" "${CVE_ID}" "${C_RESET}"
+            exit "${EX_NOT_AFFECTED}"
             ;;
         "${ST_UNSUPPORTED}")
             printf '\n%s本工具不支持当前系统，未做任何修改。%s\n' "${C_YELLOW}" "${C_RESET}"
