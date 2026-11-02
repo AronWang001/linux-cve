@@ -289,6 +289,8 @@ Before you run it:
 
 94 cases in total.
 
+Compared with v1.1.2, four cases in `tests/test_detection.sh` have updated expectations (AlmaLinux 9.4 moves from `4` to `7`; Oracle Linux 9.4 UEKR7 and SLES 15 SP5 from `4` to `2`; D12 is now the SLES 15 SP7 contradictory-status scenario), because those combinations now have a definite answer instead of `UNKNOWN`. No case or assertion was removed, and the suite gained six assertions net; a green suite only shows that the current expectations hold, not that the old `UNKNOWN` expectations still pass.
+
 ### Test environments
 
 - Local: Windows with Git Bash. A fake root is assembled and mock implementations of `dpkg`, `apt-get`, `rpm`, `dnf`, `yum`, `apk`, `pacman`, and `uname` are injected.
