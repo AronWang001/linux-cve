@@ -40,7 +40,7 @@
 - 原有 94 个用例全部保留，断言未删除、未放宽预期退出码；除下面两处说明外，`test.sh`、`test_detection.sh`、`test_amazon_linux.sh`、`test_new_distros.sh`、`test_safety.sh`、`test_installer.sh`、`test_version.sh` 未改动。
 - **`tests/test_baseline.sh` 有一处放宽**：`status` 合法值列表新增 `not_affected`，这是为新增状态放行，不是收紧校验；同一文件新增的用例会反过来检查 `not_affected` 记录不得带 `fixed_version`、不得允许自动修复、必须写明官方依据。
 - **`tests/test.sh` 第 14 个用例有一处断言更新**：`--version` 的期望字符串随版本号由 `1.2.0` 改为 `1.3.0`。这是每次发版都必须跟随的版本号断言，其余断言（`--help` 用法与退出码、非法参数）未改动。
-- `tests/lib/harness.sh` 新增 `h_hide_cmd` / `h_show_cmd`，用于模拟没有 RPM 数据库的 CloudLinux for Ubuntu 场景。
+- `tests/lib/harness.sh` 新增 `h_hide_cmd` / `h_show_cmd`，用于模拟没有 RPM 数据库的 CloudLinux for Ubuntu 场景；当 PATH 中还存在同名真实命令（例如 CI runner 自带的 `rpm`）时，会额外构造一个不含该命令的 PATH，避免场景失真。
 - 容器冒烟不覆盖 CloudLinux：官方镜像需要订阅凭据，公开 CI 无法拉取，因此该发行版只有模拟测试与只读查询验证。
 
 ### 已知限制

@@ -169,6 +169,9 @@ main "\$@"
 EOF
 
     MOCKBIN_POSIX="$(cygpath -u "${MOCKBIN}" 2>/dev/null || printf '%s' "${MOCKBIN}")"
+    # 用例执行时使用的 PATH；h_hide_cmd 需要排除真实同名命令时会临时替换它
+    RUN_PATH="${MOCKBIN_POSIX}:${PATH}"
+    HIDE_DIR=""
 
     # 预热模拟器：Windows/Git Bash 下首次执行新生成的脚本可能因安全软件扫描而异常缓慢，
     # 先各执行一次，避免首个用例被首次启动开销拖垮（不影响任何断言）。
@@ -269,16 +272,57 @@ h_flag() {
 }
 
 # 临时隐藏某个模拟命令（例如验证「没有 rpm 数据库」的 CloudLinux 场景）
+#
+# 只把 mockbin 里的模拟命令移走是不够的：CI 的 Linux runner 自带 rpm，
+# PATH 里仍会找到真实的 rpm，`have rpm` 依旧为真，场景就失真了。
+# 因此当 PATH 中还存在同名真实命令时，另外构造一个「不含该命令」的 PATH 前缀，
+# 里面用符号链接补齐其余命令（fix.sh 仍需要 grep/sed/awk 等）。
 h_hide_cmd() {
     local name="$1"
     [[ -f "${MOCKBIN}/${name}" ]] || return 1
     mv "${MOCKBIN}/${name}" "${MOCKBIN}/.${name}.hidden"
+
+    local dir="" real="" b="" f=""
+    local IFS=':'
+    for dir in ${PATH}; do
+        [[ ${dir} == "${MOCKBIN_POSIX}" ]] && continue
+        if [[ -x ${dir}/${name} ]] && [[ ! -d ${dir}/${name} ]]; then
+            real=1
+            break
+        fi
+    done
+
+    if [[ -n ${real} ]]; then
+        HIDE_DIR="${TMPROOT}/nopath"
+        rm -rf "${HIDE_DIR}"
+        mkdir -p "${HIDE_DIR}"
+        for dir in ${PATH}; do
+            [[ -d ${dir} ]] || continue
+            while IFS= read -r f; do
+                b="${f##*/}"
+                [[ ${b} == "${name}" ]] && continue
+                [[ -e ${HIDE_DIR}/${b} ]] && continue
+                ln -s "${f}" "${HIDE_DIR}/${b}" 2>/dev/null || true
+            done < <(find "${dir}" -maxdepth 1 \( -type f -o -type l \) -print 2>/dev/null)
+        done
+        unset IFS
+        RUN_PATH="${HIDE_DIR}:${MOCKBIN_POSIX}"
+    else
+        unset IFS
+    fi
+    return 0
 }
 
 h_show_cmd() {
     local name="$1"
     [[ -f "${MOCKBIN}/.${name}.hidden" ]] || return 1
     mv "${MOCKBIN}/.${name}.hidden" "${MOCKBIN}/${name}"
+    if [[ -n ${HIDE_DIR:-} ]]; then
+        rm -rf "${HIDE_DIR}"
+        HIDE_DIR=""
+        RUN_PATH="${MOCKBIN_POSIX}:${PATH}"
+    fi
+    return 0
 }
 
 h_run() {
@@ -286,7 +330,7 @@ h_run() {
         cd "${SCEN}" &&
             FIX_SYSROOT="${SCEN}/root" \
                 MOCK_ROOT="${SCEN}/state" \
-                PATH="${MOCKBIN_POSIX}:${PATH}" \
+                PATH="${RUN_PATH}" \
                 FIX_NO_TTY=1 \
                 bash "${DRIVER}" "$@" 2>&1
     )"
@@ -301,7 +345,7 @@ h_run_stdin() {
             cd "${SCEN}" &&
                 FIX_SYSROOT="${SCEN}/root" \
                     MOCK_ROOT="${SCEN}/state" \
-                    PATH="${MOCKBIN_POSIX}:${PATH}" \
+                    PATH="${RUN_PATH}" \
                     FIX_NO_TTY=1 \
                     bash "${DRIVER}" "$@" 2>&1
         )
@@ -315,7 +359,7 @@ h_run_direct() {
         cd "${SCEN}" &&
             FIX_SYSROOT="${SCEN}/root" \
                 MOCK_ROOT="${SCEN}/state" \
-                PATH="${MOCKBIN_POSIX}:${PATH}" \
+                PATH="${RUN_PATH}" \
                 bash "${FIX_SH}" "$@" 2>&1
     )"
     RC=$?
