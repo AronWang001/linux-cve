@@ -289,7 +289,7 @@ Debian 12 的 `6.12.113-1~deb12u1` 是回移版本，不与 Debian 13 的 `6.12.
 
 合计 94 个用例。
 
-与 v1.1.2 相比，`tests/test_detection.sh` 有 4 个用例的预期结果被更新（AlmaLinux 9.4 由 `4` 改为 `7`；Oracle Linux 9.4 UEKR7 与 SLES 15 SP5 由 `4` 改为 `2`；D12 改为 SLES 15 SP7 状态矛盾场景），因为这些组合在本版有了确定结论，不再是 `UNKNOWN`。用例与断言都没有删除，净增 6 条断言；但套件全绿只代表当前预期成立，不能用来证明旧的 `UNKNOWN` 预期仍然通过。
+与 v1.1.2 相比，`tests/test_detection.sh` 有 4 个用例的预期结果被更新：AlmaLinux 9.4 由 `4` 改为 `7`，Oracle Linux 9.4 UEKR7 与 SLES 15 SP5 由 `4` 改为 `2`（这三组在本版有了确定结论，不再是 `UNKNOWN`）；D12 不再是「SUSE 15.5 判 `UNKNOWN`」，改为 SLES 15 SP7 官方状态矛盾的场景。用例与断言都没有删除，净增 6 条断言；但套件全绿只代表当前预期成立，不能用来证明 v1.1.2 的旧 `UNKNOWN` 预期仍然通过。
 
 ### 测试环境
 

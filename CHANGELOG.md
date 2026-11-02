@@ -44,7 +44,7 @@
   - D5 AlmaLinux 9.4：期望退出码 `4`（`UNKNOWN`）→ `7`（`PATCH_TESTING_ONLY`），并新增「判定结果：仅测试仓库有补丁」断言。
   - D6 Oracle Linux 9.4（UEKR7）：`4` → `2`（`VULNERABLE_PATCH_AVAILABLE`），并新增 `ELSA-2026-500398`、「未启用自动修复」、未执行 `dnf install` 三条断言。
   - D8 SLES 15 SP5：`4` → `2`，并新增 LTSS 仓库频道与「未启用自动修复」两条断言。
-  - D12：原「SUSE 15.5 判 `UNKNOWN`」场景改为 SLES 15 SP7 官方状态自相矛盾，仍断言 `UNKNOWN`、未启用自动修复、不误报已修复。
+  - D12：原「SUSE 15.5 判 `UNKNOWN`」场景改为 SLES 15 SP7 官方状态自相矛盾，断言仍为「判定结果：无法确认」「未启用（仅检测）」，且不得出现「判定结果：已修复」。
 - 这 4 处合计净增 6 条断言（`test_detection.sh` 从 91 条到 97 条），没有删除或放宽检查。但 **CI 全绿只证明当前断言集合通过，不能用来证明 v1.1.2 的旧预期（上述四例均为 `UNKNOWN`）在 v1.2.0 下仍然成立**。
 
 ### 已知限制
