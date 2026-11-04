@@ -62,6 +62,12 @@ assert_has() {
     fi
 }
 
+assert_lacks() {
+    if grep -Fq -- "$1" <<<"${OUT}"; then
+        fail "输出不应包含「$1」"
+    fi
+}
+
 TMP="$(mktemp -d)"
 TMP="$(cygpath -m "${TMP}" 2>/dev/null || printf '%s' "${TMP}")"
 trap 'rm -rf "${TMP}"' EXIT
@@ -69,7 +75,7 @@ trap 'rm -rf "${TMP}"' EXIT
 # 构造一个最小发布包布局
 SRC="${TMP}/src"
 mkdir -p "${SRC}/lib" "${SRC}/adapters" "${SRC}/data"
-printf '#!/usr/bin/env bash\necho fix\n' >"${SRC}/fix.sh"
+printf '#!/usr/bin/env bash\nprintf "fix:%%s\\n" "$*"\n' >"${SRC}/fix.sh"
 printf '#!/usr/bin/env bash\necho install\n' >"${SRC}/install.sh"
 printf '#!/usr/bin/env bash\n' >"${SRC}/lib/common.sh"
 printf '#!/usr/bin/env bash\n' >"${SRC}/lib/status.sh"
@@ -130,11 +136,99 @@ run_paths() {
     RC=$?
 }
 
+# ---------------------------------------------------------------------------
+# 管道执行（curl ... | bash）回归
+#
+# 文档给的一键命令是 `curl ... | sudo bash`：此时脚本来自 stdin，BASH_SOURCE 未定义。
+# 早期版本在 set -u 下直接取 ${BASH_SOURCE[0]}，会以 unbound variable 退出，
+# 连 main 都进不去。这里用桩 curl 提供本地发布包，完整跑一遍
+# 「下载 → 整包校验 → 启动 fix.sh」的管道路径。
+# ---------------------------------------------------------------------------
+STUB_BIN="${TMP}/stubbin"
+mkdir -p "${STUB_BIN}"
+cat >"${STUB_BIN}/curl" <<'EOS'
+#!/usr/bin/env bash
+# 只处理 install.sh 用到的 -o 与 URL，把本地夹具当作远端内容返回
+out="" url=""
+while (($#)); do
+    case "$1" in
+        -o)
+            out="$2"
+            shift 2
+            ;;
+        http://* | https://*)
+            url="$1"
+            shift
+            ;;
+        *) shift ;;
+    esac
+done
+case "${url}" in
+    *.tar.gz) cp "${FIXTURE_TARBALL}" "${out}" ;;
+    */SHA256SUMS) cp "${FIXTURE_SUMS}" "${out}" ;;
+    *) exit 22 ;;
+esac
+EOS
+chmod +x "${STUB_BIN}/curl"
+STUB_BIN_POSIX="$(cygpath -u "${STUB_BIN}" 2>/dev/null || printf '%s' "${STUB_BIN}")"
+
+# 归档目录名必须与 install.sh 推导出的 <repo>-<version> 一致，否则会退回目录探测
+INSTALLER_VERSION="$(sed -n 's/^VERSION="\([0-9.]*\)"$/\1/p' "${INSTALL_SH}" | head -n 1)"
+INSTALLER_NAME="$(sed -n 's#^REPO="[^/]*/\(.*\)"$#\1#p' "${INSTALL_SH}" | head -n 1)"
+FIXTURE_SUMS=""
+
+# tar 会把 "C:/..." 当成远程主机（Cannot connect to C:），夹具内部统一用 POSIX 路径
+TMP_POSIX="$(cygpath -u "${TMP}" 2>/dev/null || printf '%s' "${TMP}")"
+
+build_fixture() {
+    rm -rf "${TMP}/stage"
+    mkdir -p "${TMP}/stage"
+    cp -R "${SRC}" "${TMP}/stage/${INSTALLER_NAME}-${INSTALLER_VERSION}"
+    (cd "${TMP_POSIX}/stage" && tar -czf "${TMP_POSIX}/fixture.tar.gz" "${INSTALLER_NAME}-${INSTALLER_VERSION}")
+}
+
+# 与文档一致：用 cat 代替 curl 把脚本喂给 bash；-s 之后的参数才是工具参数
+run_pipe() {
+    OUT="$(
+        cd "${TMP}" &&
+            cat "${INSTALL_SH}" |
+            env PATH="${STUB_BIN_POSIX}:${PATH}" \
+                FIXTURE_TARBALL="${TMP}/fixture.tar.gz" \
+                FIXTURE_SUMS="${FIXTURE_SUMS}" \
+                TMPDIR=/tmp \
+                bash -s -- "$@" 2>&1
+    )"
+    RC=$?
+}
+
 begin_case "完整清单：全部哈希通过"
 good_sums
 run_verify "${TMP}/SHA256SUMS"
 assert_rc 0
 assert_has "6 个文件 SHA256 校验通过"
+end_case
+
+begin_case "管道执行：走完整校验并原样透传参数"
+good_sums
+build_fixture
+FIXTURE_SUMS="${TMP}/SHA256SUMS" run_pipe --list-distros --yes
+assert_rc 0
+assert_lacks "unbound variable"
+assert_has "6 个文件 SHA256 校验通过"
+assert_has "启动 fix.sh --list-distros --yes"
+assert_has "fix:--list-distros --yes"
+end_case
+
+begin_case "管道执行：哈希不符仍然中止"
+good_sums
+printf 'tampered\n' >"${SRC}/lib/status.sh"
+build_fixture
+FIXTURE_SUMS="${TMP}/SHA256SUMS" run_pipe --check
+assert_rc 1
+assert_has "校验失败"
+assert_lacks "启动 fix.sh"
+# 还原夹具，避免影响后续用例的基准清单
+printf '#!/usr/bin/env bash\n' >"${SRC}/lib/status.sh"
 end_case
 
 begin_case "哈希不符：中止且不执行工具代码"
