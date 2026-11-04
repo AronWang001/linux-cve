@@ -413,7 +413,9 @@ h_set_kernel 6.4.0-150700.40.1-default
 h_run --check
 assert_rc 4
 assert_has "判定结果：无法确认"
-assert_has "未启用（仅检测）"
+# v1.3.2 起「自动修复」按状态显示：UNKNOWN 时是「不可用（状态未确认）」，
+# 不再一律显示「未启用（仅检测）」——后者会被读成该发行版不支持自动修复。
+assert_has "不可用（状态未确认）"
 assert_lacks "判定结果：已修复"
 end_case
 
