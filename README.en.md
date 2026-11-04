@@ -6,7 +6,7 @@ This tool checks whether the kernel currently running on a Linux server is affec
 
 Automatic remediation is limited to Debian 12/13 and Amazon Linux 2/2023. Ubuntu, Red Hat Enterprise Linux, and CloudLinux are detection-only: CloudLinux has published fixed packages, but they are subject to staged rollout and subscription entitlement, so the tool reports the exact versions and channels instead of installing. All other listed distributions are identified and reported but never enter the installation path. See [Supported Distributions](#supported-distributions) for the current matrix.
 
-Current version: v1.3.0. See [CHANGELOG.md](CHANGELOG.md) for changes.
+Current version: v1.3.1. See [CHANGELOG.md](CHANGELOG.md) for changes.
 
 ## Vulnerability Information
 
@@ -44,7 +44,7 @@ Whether a distribution is affected and which version carries the fix are determi
 ### One-command execution
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh | sudo bash
 ```
 
 `install.sh` is a bootstrap installer and makes no system changes itself. It downloads the source archive for the pinned tag into a temporary directory, fetches `SHA256SUMS` from the release, verifies `fix.sh`, `install.sh`, every file under `lib/` and `adapters/`, and the baseline YAML under `data/`, and only then executes `fix.sh` with the same arguments. After detection it prints the planned change and installs the kernel only after you answer `Y`. The confirmation prompt reads from `/dev/tty`, so it still works when the installer is piped into `bash`; `sudo` may ask for a password.
@@ -54,7 +54,7 @@ Verification fails closed. A missing or empty `SHA256SUMS`, a manifest that does
 ### Read-only check
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh | sudo bash -s -- --check
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh | sudo bash -s -- --check
 ```
 
 This reads system state only: no repository index refresh, no package installation, no configuration changes. `--check` governs the detection and remediation phases; it does not prevent `install.sh` from downloading the archive. If the local package index is empty, candidate versions will be reported as unknown, so run `apt-get update` or `dnf makecache` first.
@@ -62,7 +62,7 @@ This reads system state only: no repository index refresh, no package installati
 ### Unattended execution
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh | sudo bash -s -- --yes
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh | sudo bash -s -- --yes
 ```
 
 `--yes` skips the confirmation prompt only. It does not bypass the distribution allowlist, advisory verification, or version checks. Distributions outside the allowlist never enter the installation path, even with `--yes`.
@@ -70,7 +70,7 @@ curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fi
 ### Download, review, then run
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh
+curl -fsSLO https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh
 less install.sh
 sudo bash install.sh --check
 sudo bash install.sh
@@ -81,7 +81,7 @@ sudo bash install.sh
 `fix.sh` depends on the `lib/`, `adapters/`, and `data/` directories next to it and cannot be used on its own:
 
 ```bash
-git clone --branch v1.3.0 --depth 1 https://github.com/AronWang001/linux-cve-2026-98432-fix.git
+git clone --branch v1.3.1 --depth 1 https://github.com/AronWang001/linux-cve-2026-98432-fix.git
 cd linux-cve-2026-98432-fix
 sudo bash fix.sh --check
 sudo bash fix.sh
@@ -93,11 +93,11 @@ sudo bash fix.sh
 
 ```bash
 mkdir -p /tmp/cve-verify && cd /tmp/cve-verify
-base=https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v1.3.0
+base=https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v1.3.1
 curl -fsSLO "${base}/SHA256SUMS"
-curl -fsSL -o src.tar.gz https://github.com/AronWang001/linux-cve-2026-98432-fix/archive/refs/tags/v1.3.0.tar.gz
+curl -fsSL -o src.tar.gz https://github.com/AronWang001/linux-cve-2026-98432-fix/archive/refs/tags/v1.3.1.tar.gz
 tar -xzf src.tar.gz
-cd linux-cve-2026-98432-fix-1.3.0
+cd linux-cve-2026-98432-fix-1.3.1
 sha256sum -c ../SHA256SUMS
 ```
 
@@ -307,10 +307,10 @@ Before you run it:
 | `tests/test_safety.sh` | 8 | No installation on non-allowlisted distributions even with `--yes`, `--check` is read-only, `--report` has no side effects, adapter capability declarations are complete, allowlist minimality, static scan |
 | `tests/test_new_distros.sh` | 14 | Oracle UEKR6/R7/R8 and RHCK rejection, SUSE product/service pack/flavor matching, SP7 status conflict, SLE Micro transactional updates, AlmaLinux testing and `--yes` cannot bypass |
 | `tests/test_baseline.sh` | 8 | Baseline static checks: unique IDs and combination keys, complete EVR and advisory, no wildcard `fixed` records, `not_affected` records must not carry a fixed version, evidence for `autofix=yes` |
-| `tests/test_installer.sh` | 7 | Whole-archive verification: hash mismatch, missing manifest entry, path traversal, unsafe archive member, clean manifest passes |
+| `tests/test_installer.sh` | 9 | Whole-archive verification: hash mismatch, missing manifest entry, path traversal, unsafe archive member, clean manifest passes; piped execution (`curl | bash`) runs the full verification and forwards arguments |
 | `tests/test_cloudlinux.sh` | 17 | CL7 3.10 not affected, CL7h/CL8 4.18 with staged rollout, CL8/9 LTS via `kernel-lts`, CL9/10 testing only, identity cross-check, CloudLinux for Ubuntu, `--allow-staged-rollout` never enabling the bypass, read-only `--check` |
 
-112 cases in total.
+114 cases in total.
 
 Compared with v1.1.2, four cases in `tests/test_detection.sh` have updated expectations: AlmaLinux 9.4 moves from `4` to `7`, and Oracle Linux 9.4 UEKR7 and SLES 15 SP5 from `4` to `2` (these three combinations now have a definite answer instead of `UNKNOWN`); D12 is no longer "SUSE 15.5 judged `UNKNOWN`" but the SLES 15 SP7 contradictory-status scenario. No case or assertion was removed, and the suite gained six assertions net; a green suite only shows that the current expectations hold, not that v1.1.2's old `UNKNOWN` expectations still pass.
 
