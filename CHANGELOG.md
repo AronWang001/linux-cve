@@ -2,6 +2,26 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.3.1] - 2026-11-04
+
+修复一键安装命令完全无法执行的问题。`install.sh` 末尾用 `${BASH_SOURCE[0]}` 判断是否被直接执行，但脚本启用了 `set -Eeuo pipefail`；通过管道执行（`curl ... | sudo bash`，文档给出的正是这种形式）时该变量不存在，bash 直接以 `BASH_SOURCE[0]: unbound variable` 退出，`main` 从未运行，下载、校验、修复全部没有发生。该缺陷自 1.2.0 引入，1.3.0 仍然存在，因此 **v1.2.0 与 v1.3.0 的一键命令同样是坏的**。
+
+此前验证只覆盖了 `bash install.sh` 与测试里的 `source install.sh`，两种方式都定义了该变量，所以一直没暴露；「一键安装已实测」的结论对应当的是本地执行安装器，而不是文档里那条管道命令。
+
+### 修复
+
+- `install.sh`：判断改为 `[[ -z ${BASH_SOURCE[0]:-} ]] || [[ ${BASH_SOURCE[0]} == "${0}" ]]`。管道执行时该变量为空，按直接执行处理并调用 `main`；被 `source` 时行为不变，测试仍可加载其中的校验函数。
+- `install.sh` 文件头的用法示例版本号由 `v1.2.0` 更正为当前版本（此前漏改）。
+
+### 测试
+
+- `tests/test_installer.sh` 由 7 个用例增至 9 个：新增「管道执行：走完整校验并原样透传参数」与「管道执行：哈希不符仍然中止」。用例用桩 `curl` 提供本地发布包，按文档形式 `cat install.sh | bash -s -- ...` 执行，断言进入 `main`、整包校验通过、参数原样传给 `fix.sh`，且不出现 `unbound variable`。两条用例在修复前必然失败，修复后通过。
+- 用例总数 112 → 114。`tests/test.sh` 的 `--version` 断言随版本号由 `1.3.0` 改为 `1.3.1`（每次发版都需跟随，不是放宽断言）。
+
+### 影响范围
+
+仅 `install.sh` 的判断逻辑与版本号。`fix.sh` 判定逻辑、基线数据、退出码、自动修复范围均未改动（仍为 Debian 12/13、Amazon Linux 2/2023）。
+
 ## [1.3.0] - 2026-11-02
 
 新增 CloudLinux 7/7h/8/8 LTS/9/9 LTS/10 的检测基线，并新增 `NOT_AFFECTED` 状态（退出码 `8`）与 `--allow-staged-rollout` 参数。同时重新核验 Oracle Linux UEK、SUSE/openSUSE 与 AlmaLinux 的官方页面，修正 v1.2.0 中关于 SLES 15 SP7 的表述错误。

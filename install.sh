@@ -12,16 +12,16 @@
 #
 # 用法（以下命令可直接整条粘贴执行）：
 #   一键修复（交互式，确认后直接执行修复）：
-#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh | sudo bash
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh | sudo bash
 #
 #   只读检查：
-#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh | sudo bash -s -- --check
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh | sudo bash -s -- --check
 #
 #   免交互执行（跳过确认，但不跳过白名单、公告核验与版本校验）：
-#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh | sudo bash -s -- --yes
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh | sudo bash -s -- --yes
 #
 #   先下载再审查：
-#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.2.0/install.sh -o install.sh
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh -o install.sh
 #     less install.sh && sudo bash install.sh
 #
 # License: MIT
@@ -29,7 +29,7 @@
 set -Eeuo pipefail
 
 REPO="AronWang001/linux-cve-2026-98432-fix"
-VERSION="1.3.0"
+VERSION="1.3.1"
 TAG="v${VERSION}"
 SRC_NAME="${REPO##*/}"
 TARBALL="https://github.com/${REPO}/archive/refs/tags/${TAG}.tar.gz"
@@ -180,6 +180,8 @@ main() {
     exec bash "${SRC_DIR}/fix.sh" "$@"
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+# 直接执行、或通过管道执行（curl ... | bash，此时 BASH_SOURCE 未定义）时进入 main。
+# 必须带 :- 兜底：脚本启用了 set -u，未定义变量直接取值会以 unbound variable 退出。
+if [[ -z ${BASH_SOURCE[0]:-} ]] || [[ ${BASH_SOURCE[0]} == "${0}" ]]; then
     main "$@"
 fi

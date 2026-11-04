@@ -6,7 +6,7 @@
 
 自动修复仅覆盖 Debian 12/13 与 Amazon Linux 2/2023。Ubuntu、Red Hat Enterprise Linux 与 CloudLinux 只做检测：CloudLinux 的官方修复包已发布，但涉及灰度推送与订阅资格，工具只给出精确版本与渠道。其余发行版只做识别与信息输出，不进入安装流程。具体状态见[发行版支持矩阵](#发行版支持矩阵)。
 
-当前版本 v1.3.0，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本 v1.3.1，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 漏洞背景
 
@@ -44,7 +44,7 @@
 ### 一键执行
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh | sudo bash
 ```
 
 `install.sh` 是引导安装器，本身不修改系统：它把对应 Tag 的源码归档下载到临时目录，解包后从 Release 读取 `SHA256SUMS`，逐个校验 `fix.sh`、`install.sh`、`lib/*.sh`、`adapters/*.sh` 与 `data/*.yml`，全部通过后才以相同参数执行 `fix.sh`。检测完成后显示修复计划，输入 `Y` 确认才安装内核。确认提示从 `/dev/tty` 读取，管道执行也能正常交互；`sudo` 可能要求输入密码。
@@ -54,7 +54,7 @@ curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fi
 ### 只读检查
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh | sudo bash -s -- --check
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh | sudo bash -s -- --check
 ```
 
 只读取系统状态，不刷新包索引、不安装软件包、不修改配置。`--check` 约束的是检测与修复阶段，不影响 `install.sh` 自身的下载行为。本地包索引为空时，候选版本会显示为未知，需要先自行执行 `apt-get update` 或 `dnf makecache`。
@@ -62,7 +62,7 @@ curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fi
 ### 免交互执行
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh | sudo bash -s -- --yes
+curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh | sudo bash -s -- --yes
 ```
 
 `--yes` 只跳过确认提示，不跳过发行版白名单、公告核验与版本校验。非白名单发行版即使指定 `--yes` 也不会进入安装流程。
@@ -70,7 +70,7 @@ curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fi
 ### 下载后审查再执行
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.0/install.sh
+curl -fsSLO https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh
 less install.sh
 sudo bash install.sh --check
 sudo bash install.sh
@@ -81,7 +81,7 @@ sudo bash install.sh
 `fix.sh` 依赖同目录的 `lib/`、`adapters/` 与 `data/`，不能单独下载使用：
 
 ```bash
-git clone --branch v1.3.0 --depth 1 https://github.com/AronWang001/linux-cve-2026-98432-fix.git
+git clone --branch v1.3.1 --depth 1 https://github.com/AronWang001/linux-cve-2026-98432-fix.git
 cd linux-cve-2026-98432-fix
 sudo bash fix.sh --check
 sudo bash fix.sh
@@ -93,11 +93,11 @@ sudo bash fix.sh
 
 ```bash
 mkdir -p /tmp/cve-verify && cd /tmp/cve-verify
-base=https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v1.3.0
+base=https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v1.3.1
 curl -fsSLO "${base}/SHA256SUMS"
-curl -fsSL -o src.tar.gz https://github.com/AronWang001/linux-cve-2026-98432-fix/archive/refs/tags/v1.3.0.tar.gz
+curl -fsSL -o src.tar.gz https://github.com/AronWang001/linux-cve-2026-98432-fix/archive/refs/tags/v1.3.1.tar.gz
 tar -xzf src.tar.gz
-cd linux-cve-2026-98432-fix-1.3.0
+cd linux-cve-2026-98432-fix-1.3.1
 sha256sum -c ../SHA256SUMS
 ```
 
@@ -307,10 +307,10 @@ CloudLinux 7 的 3.10 内核不含漏洞代码，无需安装与重启。工具�
 | `tests/test_safety.sh` | 8 | 非白名单发行版指定 `--yes` 也不安装、`--check` 只读、`--report` 无副作用、适配层能力声明完整、白名单最小化、静态扫描 |
 | `tests/test_new_distros.sh` | 14 | Oracle UEKR6/R7/R8 与 RHCK 拒绝、SUSE 产品/SP/flavor 精确匹配、SP7 状态冲突、SLE Micro 事务式更新、AlmaLinux testing 与 `--yes` 不可绕过 |
 | `tests/test_baseline.sh` | 8 | 基线静态检查：ID 与组合键唯一、EVR 与公告完整、通配记录不得声明 fixed、`not_affected` 不得带修复版本、`autofix=yes` 的验证证据 |
-| `tests/test_installer.sh` | 7 | 整包校验：哈希不符、清单缺失、路径穿越、归档成员异常、正常清单通过 |
+| `tests/test_installer.sh` | 9 | 整包校验：哈希不符、清单缺失、路径穿越、归档成员异常、正常清单通过；管道执行（`curl | bash`）走完整校验且参数透传 |
 | `tests/test_cloudlinux.sh` | 17 | CL7 3.10 不受影响、CL7h/CL8 4.18 与 staged rollout、CL8/9 LTS 的 `kernel-lts`、CL9/10 仅 testing、身份交叉校验、CloudLinux for Ubuntu、`--allow-staged-rollout` 不启用 bypass、`--check` 只读 |
 
-合计 112 个用例。
+合计 114 个用例。
 
 与 v1.1.2 相比，`tests/test_detection.sh` 有 4 个用例的预期结果被更新：AlmaLinux 9.4 由 `4` 改为 `7`，Oracle Linux 9.4 UEKR7 与 SLES 15 SP5 由 `4` 改为 `2`（这三组在本版有了确定结论，不再是 `UNKNOWN`）；D12 不再是「SUSE 15.5 判 `UNKNOWN`」，改为 SLES 15 SP7 官方状态矛盾的场景。用例与断言都没有删除，净增 6 条断言；但套件全绿只代表当前预期成立，不能用来证明 v1.1.2 的旧 `UNKNOWN` 预期仍然通过。
 
