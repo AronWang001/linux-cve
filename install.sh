@@ -12,16 +12,16 @@
 #
 # 用法（以下命令可直接整条粘贴执行）：
 #   一键修复（交互式，确认后直接执行修复）：
-#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh | sudo bash
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.2/install.sh | sudo bash
 #
 #   只读检查：
-#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh | sudo bash -s -- --check
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.2/install.sh | sudo bash -s -- --check
 #
 #   免交互执行（跳过确认，但不跳过白名单、公告核验与版本校验）：
-#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh | sudo bash -s -- --yes
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.2/install.sh | sudo bash -s -- --yes
 #
 #   先下载再审查：
-#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.1/install.sh -o install.sh
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.2/install.sh -o install.sh
 #     less install.sh && sudo bash install.sh
 #
 # License: MIT
@@ -29,13 +29,23 @@
 set -Eeuo pipefail
 
 REPO="AronWang001/linux-cve-2026-98432-fix"
-VERSION="1.3.1"
+VERSION="1.3.2"
 TAG="v${VERSION}"
 SRC_NAME="${REPO##*/}"
 TARBALL="https://github.com/${REPO}/archive/refs/tags/${TAG}.tar.gz"
 SUMS="https://github.com/${REPO}/releases/download/${TAG}/SHA256SUMS"
 TMPDIR_RUN=""
 SRC_DIR=""
+
+# 一键模式下 fix.sh 只存在于临时目录，退出即被清理，机器上不会留下 fix.sh。
+# 这里把「重新调用本工具」的完整命令交给 fix.sh，让所有「请再次执行」的提示
+# 都是可以真正粘贴执行的命令，而不是指向一个已被删除的文件。
+if [[ -z ${BASH_SOURCE[0]:-} ]]; then
+    BOOTSTRAP_CMD="curl -fsSL https://raw.githubusercontent.com/${REPO}/${TAG}/install.sh | sudo bash -s --"
+else
+    SELF_PATH="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/$(basename -- "${BASH_SOURCE[0]}")"
+    BOOTSTRAP_CMD="sudo bash ${SELF_PATH}"
+fi
 
 cleanup() {
     if [[ -n ${TMPDIR_RUN} ]]; then
@@ -177,6 +187,7 @@ main() {
     verify_manifest "${TMPDIR_RUN}/SHA256SUMS"
 
     printf '[信息] 启动 fix.sh %s\n' "$*"
+    export FIX_BOOTSTRAP_CMD="${BOOTSTRAP_CMD}"
     exec bash "${SRC_DIR}/fix.sh" "$@"
 }
 

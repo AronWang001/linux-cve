@@ -75,7 +75,9 @@ trap 'rm -rf "${TMP}"' EXIT
 # 构造一个最小发布包布局
 SRC="${TMP}/src"
 mkdir -p "${SRC}/lib" "${SRC}/adapters" "${SRC}/data"
-printf '#!/usr/bin/env bash\nprintf "fix:%%s\\n" "$*"\n' >"${SRC}/fix.sh"
+# 单引号是故意的：这里要写出一个含 $* 与 ${FIX_BOOTSTRAP_CMD:-} 的桩脚本
+# shellcheck disable=SC2016
+printf '#!/usr/bin/env bash\nprintf "fix:%%s|boot:%%s\\n" "$*" "${FIX_BOOTSTRAP_CMD:-}"\n' >"${SRC}/fix.sh"
 printf '#!/usr/bin/env bash\necho install\n' >"${SRC}/install.sh"
 printf '#!/usr/bin/env bash\n' >"${SRC}/lib/common.sh"
 printf '#!/usr/bin/env bash\n' >"${SRC}/lib/status.sh"
@@ -217,6 +219,8 @@ assert_lacks "unbound variable"
 assert_has "6 个文件 SHA256 校验通过"
 assert_has "启动 fix.sh --list-distros --yes"
 assert_has "fix:--list-distros --yes"
+# 一键模式必须把「重新执行」的命令传给 fix.sh，否则重启后的提示指向不存在的本地文件
+assert_has "boot:curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v${INSTALLER_VERSION}/install.sh | sudo bash -s --"
 end_case
 
 begin_case "管道执行：哈希不符仍然中止"

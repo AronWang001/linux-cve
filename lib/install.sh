@@ -376,12 +376,21 @@ print_staged_rollout_notice() {
 }
 
 print_reboot_notice() {
+    # 参数为 0 表示修复内核在本轮之前就已安装（判定阶段即待重启），
+    # 此时本轮没有执行任何安装，不能显示「安装状态 成功」。
+    local installed_this_run="${1:-1}"
+
     printf '\n%s────────────────────────────────────────────────────────%s\n' "${C_BOLD}" "${C_RESET}"
     printf '%s 修复结果%s\n' "${C_BOLD}" "${C_RESET}"
     printf '%s────────────────────────────────────────────────────────%s\n' "${C_BOLD}" "${C_RESET}"
     kv "原运行内核" "${KERNEL_RELEASE}（${RUNNING_VERSION:-未知}）"
-    kv "新安装内核" "${NEW_KERNEL_RELEASE}（${NEW_KERNEL_VERSION:-未知}）"
-    kv "安装状态" "成功，修复内核已就位"
+    if [[ ${installed_this_run} -eq 1 ]]; then
+        kv "新安装内核" "${NEW_KERNEL_RELEASE}（${NEW_KERNEL_VERSION:-未知}）"
+        kv "安装状态" "成功，修复内核已就位"
+    else
+        kv "已安装内核" "${NEW_KERNEL_RELEASE}（${NEW_KERNEL_VERSION:-未知}）"
+        kv "安装状态" "此前已安装，本次未执行安装（无需重复安装）"
+    fi
     kv "是否需要重启" "需要"
 
     cat <<EOF
@@ -394,9 +403,9 @@ print_reboot_notice() {
 
       ${C_BOLD}reboot${C_RESET}
 
-  重启后请再次执行本脚本进行二次验证：
+  重启后请再次执行本工具进行二次验证（等待返回「判定结果：已修复」）：
 
-      sudo bash ${SCRIPT_NAME} --check
+      $(tool_cmd --check)
 
 EOF
 }
