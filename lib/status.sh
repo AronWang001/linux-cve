@@ -234,6 +234,20 @@ assess() {
     return 0
 }
 
+# 「自动修复」一行描述的是这台机器当前能不能用本工具装包。
+# 已修复、待重启、不受影响、状态未确认时，AUTOFIX 本来就不会被置 1，
+# 若一律显示「未启用（仅检测）」会让人误以为该发行版不支持自动修复。
+autofix_label() {
+    case "${STATUS}" in
+        "${ST_FIXED}") printf '不适用（已修复）' ;;
+        "${ST_PENDING}") printf '不适用（等待重启）' ;;
+        "${ST_NOT_AFFECTED}") printf '不适用（不受影响）' ;;
+        "${ST_UNSUPPORTED}") printf '不可用（不支持的系统）' ;;
+        "${ST_UNKNOWN}") printf '不可用（状态未确认）' ;;
+        *) if [[ ${AUTOFIX} -eq 1 ]]; then printf '已启用'; else printf '未启用（仅检测）'; fi ;;
+    esac
+}
+
 print_assessment() {
     local flavor_label="${KERNEL_FLAVOR}"
 
@@ -271,7 +285,7 @@ print_assessment() {
     fi
     kv "运行内核" "${KERNEL_RELEASE}"
     kv "运行版本" "${RUNNING_VERSION:-未知}"
-    kv "自动修复" "$([[ ${AUTOFIX} -eq 1 ]] && printf '已启用' || printf '未启用（仅检测）')"
+    kv "自动修复" "$(autofix_label)"
 
     case "${STATUS}" in
         "${ST_FIXED}")

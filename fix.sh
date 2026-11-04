@@ -26,13 +26,34 @@
 
 set -Eeuo pipefail
 
-readonly SCRIPT_VERSION="1.3.1"
-readonly SCRIPT_NAME="${0##*/}"
+readonly SCRIPT_VERSION="1.3.2"
+# 用 BASH_SOURCE 而不是 $0：被其他脚本 source 时 $0 是宿主脚本名，
+# 会让「请执行 sudo bash xxx」的提示指向错误的文件。
+readonly SCRIPT_NAME="${BASH_SOURCE[0]##*/}"
 readonly CVE_ID="CVE-2026-98432"
 readonly PROJECT_URL="https://github.com/AronWang001/linux-cve-2026-98432-fix"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+readonly SCRIPT_DIR
 LIB_ROOT="${SCRIPT_DIR}"
+
+# 一键安装器把工具解压到临时目录，退出即删除，机器上不会留下 fix.sh。
+# install.sh 通过 FIX_BOOTSTRAP_CMD 传入「重新调用本工具」的命令前缀，
+# 保证所有「请再次执行」的提示都是一条可以真正粘贴执行的命令。
+if [[ -n ${FIX_BOOTSTRAP_CMD:-} ]]; then
+    TOOL_BASE_CMD="${FIX_BOOTSTRAP_CMD}"
+else
+    TOOL_BASE_CMD="sudo bash ${SCRIPT_NAME}"
+fi
+readonly TOOL_BASE_CMD
+
+tool_cmd() {
+    local out="${TOOL_BASE_CMD}" a
+    for a in "$@"; do
+        out="${out} ${a}"
+    done
+    printf '%s' "${out}"
+}
 
 # shellcheck source=lib/common.sh
 source "${LIB_ROOT}/lib/common.sh"
@@ -213,6 +234,12 @@ CVE-2026-98432 多发行版检测与修复工具（v${SCRIPT_VERSION}）
 
 项目主页: ${PROJECT_URL}
 EOF
+
+    # 一键安装器不会把 fix.sh 留在磁盘上，示例里的本地路径对它不适用
+    if [[ -n ${FIX_BOOTSTRAP_CMD:-} ]]; then
+        printf '\n注意：本次通过一键安装器运行，工具解压在临时目录，退出后即被删除。\n'
+        printf '      再次执行请使用：%s\n' "$(tool_cmd --check)"
+    fi
 }
 
 version_info() {
@@ -283,8 +310,8 @@ require_root() {
     local uid="${EUID:-$(id -u)}"
     if [[ ${uid} -ne 0 ]]; then
         log_err "需要 root 权限运行本脚本（当前 UID=${uid}）。"
-        log_err "请使用：sudo bash ${SCRIPT_NAME}${*:+ $*}"
-        log_err "仅做检测可用：sudo bash ${SCRIPT_NAME} --check"
+        log_err "请使用：$(tool_cmd "$@")"
+        log_err "仅做检测可用：$(tool_cmd --check)"
         exit "${EX_ERROR}"
     fi
 }
@@ -507,7 +534,7 @@ main() {
             ;;
         "${ST_UNSUPPORTED}")
             printf '\n%s本工具不支持当前系统，未做任何修改。%s\n' "${C_YELLOW}" "${C_RESET}"
-            printf '  支持矩阵：sudo bash %s --list-distros\n\n' "${SCRIPT_NAME}"
+            printf '  支持矩阵：%s\n\n' "$(tool_cmd --list-distros)"
             exit "${EX_ERROR}"
             ;;
         "${ST_UNKNOWN}")
@@ -533,14 +560,15 @@ main() {
             NEW_KERNEL_RELEASE="${INSTALLED_FIXED_RELEASE}"
             NEW_KERNEL_VERSION="${INSTALLED_FIXED_VERSION}"
             printf '\n%s修复内核已安装但尚未生效，请安排维护窗口重启。%s\n' "${C_YELLOW}" "${C_RESET}"
-            print_reboot_notice
+            # 进入这里说明判定阶段就是待重启，本轮没有执行安装
+            print_reboot_notice 0
             exit "${EX_PENDING_REBOOT}"
             ;;
         "${ST_VULN_FIXABLE}")
             if [[ ${MODE} == "check" ]]; then
                 if [[ ${AUTOFIX} -eq 1 ]]; then
                     printf '\n%s当前系统受 %s 影响，可执行以下命令修复：%s\n' "${C_YELLOW}" "${CVE_ID}" "${C_RESET}"
-                    printf '    sudo bash %s\n\n' "${SCRIPT_NAME}"
+                    printf '    %s\n\n' "$(tool_cmd)"
                     if [[ ${DISTRO_FAMILY} == "debian" ]] && select_target_package; then
                         printf '  预计安装：%s（%s）\n\n' "${TARGET_PKG}" "${TARGET_VERSION}"
                     elif [[ ${DISTRO_FAMILY} == "rpm" ]] && select_target_rpm; then

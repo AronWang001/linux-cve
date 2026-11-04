@@ -446,6 +446,38 @@ assert_has "判定结果：待重启"
 assert_has "需要重启后才会生效"
 assert_has "reboot"
 assert_no_file "${SCEN}/state/calls/apt_install"
+# 判定阶段就已待重启：本轮没有安装任何东西，不能显示「新安装内核 / 安装状态成功」
+assert_has "不适用（等待重启）"
+assert_has "此前已安装，本次未执行安装"
+assert_lacks "新安装内核"
+# 直接运行源码时，重跑提示仍指向本地 fix.sh
+assert_has "sudo bash fix.sh --check"
+end_case
+
+begin_case "8b. 一键安装模式：重跑提示给出可执行的完整命令"
+scenario pending-boot bookworm
+add_kernel linux-image-6.1.0-49-amd64 6.1.174-1 6.1.0-49-amd64
+add_kernel linux-image-6.1.0-54-amd64 6.1.190-1 6.1.0-54-amd64
+set_kernel 6.1.0-49-amd64
+export FIX_BOOTSTRAP_CMD="curl -fsSL https://example.invalid/install.sh | sudo bash -s --"
+run_fix --check
+unset FIX_BOOTSTRAP_CMD
+assert_rc 3
+# 一键模式下机器上并没有 fix.sh，提示必须是一整条可粘贴执行的命令
+assert_has "curl -fsSL https://example.invalid/install.sh | sudo bash -s -- --check"
+assert_lacks "sudo bash fix.sh"
+assert_has "此前已安装，本次未执行安装"
+assert_no_file "${SCEN}/state/calls/apt_install"
+end_case
+
+begin_case "8c. 一键安装模式：--help 说明工具不会留在磁盘"
+scenario pending-help bookworm
+export FIX_BOOTSTRAP_CMD="curl -fsSL https://example.invalid/install.sh | sudo bash -s --"
+run_fix --help
+unset FIX_BOOTSTRAP_CMD
+assert_rc 0
+assert_has "退出后即被删除"
+assert_has "再次执行请使用：curl -fsSL https://example.invalid/install.sh | sudo bash -s -- --check"
 end_case
 
 # ---------------------------------------------------------------------------
@@ -535,7 +567,7 @@ assert_has "退出码"
 
 run_fix --version
 assert_rc 0
-assert_has "1.3.1"
+assert_has "1.3.2"
 
 run_fix --bogus
 assert_rc 1
