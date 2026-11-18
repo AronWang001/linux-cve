@@ -85,6 +85,27 @@ $ CGO_ENABLED=1 go test -race ./...         → 全部 ok（8 包 1.1–1.9s）
 
 未执行项：无 Linux 实机测试、无 GUI/交互测试（本阶段无交互功能）。
 
+### 4.1 v1.3.2 回归测试
+
+旧代码零改动核验：
+
+```
+$ git diff --stat ec1415b..HEAD -- fix.sh lib adapters install.sh data tests .github
+  （无输出）          # 0 个文件变更
+```
+
+`tests/test.sh` 主套件真实执行结果：
+
+```
+$ bash tests/test.sh
+...
+用例：28  通过：28  失败：0
+全部通过
+EXIT=0
+```
+
+28/28 全部 PASS，退出码 0。注：Windows Git Bash 下该套件全程约 6 分钟；曾以 540 秒超时截断（19 通过后 TIMEOUT，非断言失败），加大超时后一次跑完。其余套件（test_detection/test_version/test_safety 等 6 套 + 容器冒烟）与阶段 0 结论一致：本机无 Docker/WSL，标记 BLOCKED，不计为通过。
+
 ## 5. CLI 实测输出
 
 ```
