@@ -134,7 +134,7 @@ func TestDBCommands(t *testing.T) {
 	if code != exitcode.OK {
 		t.Fatalf("db migrate 退出码应为 0，实际 %d（%s）", code, errOut)
 	}
-	if !strings.Contains(out, "applied 1 migration(s); schema version = 1") {
+	if !strings.Contains(out, "applied 2 migration(s); schema version = 2") {
 		t.Errorf("迁移输出不符，实际 %q", out)
 	}
 
@@ -149,7 +149,7 @@ func TestDBCommands(t *testing.T) {
 	if code != exitcode.OK {
 		t.Fatalf("db status 退出码应为 0，实际 %d", code)
 	}
-	for _, want := range []string{"schema      : 1", "0001_init", "pending     : none"} {
+	for _, want := range []string{"schema      : 2", "0001_init", "0002_inventory", "pending     : none"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("状态输出应包含 %q，实际 %q", want, out)
 		}

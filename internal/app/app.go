@@ -15,6 +15,7 @@ import (
 	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
 	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/config"
 	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
+	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/inventory"
 	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/logging"
 )
 
@@ -35,6 +36,9 @@ type env struct {
 	cfg    *config.Config
 	log    *slog.Logger
 	getenv func(string) string
+
+	// newCollector 是资产采集器工厂，测试注入合成夹具；nil 时用 inventory.New。
+	newCollector func() *inventory.Collector
 }
 
 // Main 是进程入口，返回最终退出码。
@@ -88,6 +92,8 @@ func (e *env) run(ctx context.Context, args []string) (exitcode.Code, error) {
 		return e.runVersion(cmdArgs)
 	case "db":
 		return e.runDB(ctx, cmdArgs)
+	case "inventory":
+		return e.runInventory(ctx, cmdArgs)
 	case "help", "-h", "--help":
 		return e.runHelp(cmdArgs)
 	case "scan", "list", "show", "plan", "fix", "report", "feed", "support":
