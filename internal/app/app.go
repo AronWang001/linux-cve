@@ -45,10 +45,17 @@ type env struct {
 // 退出码优先取自 error 携带的 Code，保证错误与退出码不会不一致。
 func Main(ctx context.Context, args []string, stdout, stderr io.Writer) exitcode.Code {
 	e := &env{stdout: stdout, stderr: stderr, getenv: os.Getenv}
+	return mainWithEnv(ctx, e, args)
+}
+
+// mainWithEnv 是 Main 的真实入口逻辑（退出码优先 + stderr 输出 + 中断映射）。
+// Main 与测试共用它，测试只注入采集器工厂，不复刻退出码/输出逻辑，
+// 从而保证 CLI 测试经过与生产完全一致的入口路径。
+func mainWithEnv(ctx context.Context, e *env, args []string) exitcode.Code {
 	code, err := e.run(ctx, args)
 
 	if err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
+		fmt.Fprintf(e.stderr, "error: %s\n", err)
 		if c := apperr.CodeOf(err); c != exitcode.OK {
 			code = c
 		}

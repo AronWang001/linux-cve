@@ -71,16 +71,8 @@ func (e *env) runInventory(ctx context.Context, args []string) (exitcode.Code, e
 
 	// 输出结果
 	if asJSON {
-		out := struct {
-			Inventory interface{} `json:"inventory"`
-			System    interface{} `json:"system"`
-			Warnings  []string    `json:"warnings,omitempty"`
-		}{
-			Inventory: result.Inventory,
-			System:    result.System,
-			Warnings:  result.Warnings,
-		}
-		b, err := json.MarshalIndent(out, "", "  ")
+		dto := buildInventoryJSON(result)
+		b, err := json.MarshalIndent(dto, "", "  ")
 		if err != nil {
 			return exitcode.Error, apperr.Wrap(exitcode.Error, "inventory", "序列化采集结果失败", err)
 		}

@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
 	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/database"
 	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
 	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/inventory"
@@ -69,7 +68,8 @@ func synthDebianCollector(m *cliMockRunner) func() *inventory.Collector {
 // dpkgFormatForTest 与 internal/inventory 的 dpkgQueryFormat 保持一致。
 const dpkgFormatForTest = "${binary:Package}\t${Version}\t${Architecture}\t${Source}\t${source:Version}\t${Vendor}\t${Status}\n"
 
-// runCLIWithCollector 以注入的采集器工厂执行 CLI，便于测试替换。
+// runCLIWithCollector 通过真实 Main 入口（mainWithEnv）执行 CLI，仅注入采集器工厂。
+// 不复制 Main 的退出码/输出逻辑，保证与生产入口一致。
 func runCLIWithCollector(t *testing.T, factory func() *inventory.Collector, args ...string) (exitcode.Code, string, string) {
 	t.Helper()
 	var out, errOut bytes.Buffer
@@ -79,14 +79,7 @@ func runCLIWithCollector(t *testing.T, factory func() *inventory.Collector, args
 		getenv:       func(string) string { return "" },
 		newCollector: factory,
 	}
-	code, err := e.run(context.Background(), args)
-	if err != nil {
-		// 复刻 Main 的退出码优先逻辑与 stderr 输出
-		_, _ = errOut.WriteString("error: " + err.Error() + "\n")
-		if c := apperr.CodeOf(err); c != exitcode.OK {
-			code = c
-		}
-	}
+	code := mainWithEnv(context.Background(), e, args)
 	return code, out.String(), errOut.String()
 }
 
@@ -119,24 +112,31 @@ func TestInventoryCommandJSON(t *testing.T) {
 		t.Fatalf("inventory --json 退出码应为 0，实际 %d（stderr: %s）", code, errOut)
 	}
 	var parsed struct {
-		Inventory struct {
-			DistroID string `json:"DistroID"`
-			Packages []struct {
-				Ref struct {
-					Name string `json:"Name"`
-				} `json:"Ref"`
-			} `json:"Packages"`
-		} `json:"inventory"`
+		SchemaVersion int      `json:"schema_version"`
+		CollectedAt   string   `json:"collected_at"`
+		Distro        struct {
+			ID string `json:"id"`
+		} `json:"distro"`
+		Packages []struct {
+			Name string `json:"name"`
+		} `json:"packages"`
 		Warnings []string `json:"warnings"`
 	}
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
 		t.Fatalf("JSON 输出无法解析: %v（原始 %q）", err, out)
 	}
-	if parsed.Inventory.DistroID != "debian" {
-		t.Errorf("JSON DistroID 应为 debian，实际 %q", parsed.Inventory.DistroID)
+	if parsed.SchemaVersion != inventorySchemaVersion {
+		t.Errorf("schema_version 应为 %d，实际 %d", inventorySchemaVersion, parsed.SchemaVersion)
 	}
-	if len(parsed.Inventory.Packages) != 2 {
-		t.Errorf("JSON 应含 2 个包，实际 %d", len(parsed.Inventory.Packages))
+	if parsed.Distro.ID != "debian" {
+		t.Errorf("distro.id 应为 debian，实际 %q", parsed.Distro.ID)
+	}
+	if len(parsed.Packages) != 2 {
+		t.Errorf("JSON 应含 2 个包，实际 %d", len(parsed.Packages))
+	}
+	// 空 warnings 应为 [] 而非 null
+	if parsed.Warnings == nil {
+		t.Errorf("warnings 应为空数组 []，实际 null")
 	}
 }
 
@@ -251,5 +251,125 @@ func TestInventoryCommandSaveToUninitializedDB(t *testing.T) {
 	}
 	if errOut == "" {
 		t.Error("数据库异常应向 stderr 输出错误")
+	}
+}
+
+// ---- CLI inventory JSON DTO 专项测试 ----
+
+// TestInventoryJSONFieldNames 验证 JSON 字段全部为 snake_case，
+// 且不含 domain 模型的 PascalCase 字段名。
+func TestInventoryJSONFieldNames(t *testing.T) {
+	cfgPath, dbPath := isolatedArgs(t)
+	m := newCLIMock()
+	_, out, _ := runCLIWithCollector(t, synthDebianCollector(m),
+		"--config", cfgPath, "--db", dbPath, "inventory", "--json")
+
+	// 不应出现 Go 默认 PascalCase 字段名
+	for _, bad := range []string{"\"DistroID\"", "\"Packages\"", "\"CollectedAt\"", "\"Ref\"", "\"SourceName\"", "\"EntryHash\"", "\"SchemaVersion\""} {
+		if strings.Contains(out, bad) {
+			t.Errorf("JSON 不应含 PascalCase 字段 %s，实际 %q", bad, out)
+		}
+	}
+	// 应出现 snake_case 字段
+	for _, want := range []string{"\"schema_version\"", "\"collected_at\"", "\"distro\"", "\"packages\"", "\"source_name\"", "\"entry_hash\"", "\"origin_channel\""} {
+		if !strings.Contains(out, want) {
+			t.Errorf("JSON 应含字段 %s，实际 %q", want, out)
+		}
+	}
+}
+
+// TestInventoryJSONEmptyFields 验证空字段与空数组的表达方式。
+func TestInventoryJSONEmptyFields(t *testing.T) {
+	cfgPath, dbPath := isolatedArgs(t)
+	m := newCLIMock()
+	// 单包夹具：无源码包名、vendor 空、install time 零值 → 校验空字段输出
+	m.set("uname", []string{"-m"}, "x86_64")
+	m.set("uname", []string{"-r"}, "6.1.0-37-amd64")
+	m.set("dpkg-query", []string{"-W", "-f=" + dpkgFormatForTest},
+		"foo\t1.0\tamd64\t\t\t\tinstall ok installed\n")
+	factory := func() *inventory.Collector {
+		return &inventory.Collector{
+			Runner: m,
+			OSPath: "/tmp/synth-empty",
+			ReadFile: func(string) ([]byte, error) {
+				return []byte("ID=debian\nVERSION_ID=12\n"), nil
+			},
+			Now: func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) },
+		}
+	}
+	_, out, _ := runCLIWithCollector(t, factory,
+		"--config", cfgPath, "--db", dbPath, "inventory", "--json")
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &raw); err != nil {
+		t.Fatalf("JSON 解析失败: %v", err)
+	}
+	pkgs := raw["packages"].([]interface{})
+	if len(pkgs) != 1 {
+		t.Fatalf("应含 1 个包，实际 %d", len(pkgs))
+	}
+	pkg := pkgs[0].(map[string]interface{})
+	// 空字符串应显式输出 ""，非省略
+	if pkg["source_name"] != "" {
+		t.Errorf("source_name 应为空串，实际 %v", pkg["source_name"])
+	}
+	if pkg["vendor"] != "" {
+		t.Errorf("vendor 应为空串，实际 %v", pkg["vendor"])
+	}
+	if pkg["install_time"] != "" {
+		t.Errorf("install_time 零值应为空串，实际 %v", pkg["install_time"])
+	}
+	// warnings 应为 [] 而非 null
+	if raw["warnings"] == nil {
+		t.Errorf("warnings 应为空数组，实际 null")
+	}
+}
+
+// TestInventoryJSONStableOutput 验证输出顺序稳定（同输入两次输出逐字节一致）。
+func TestInventoryJSONStableOutput(t *testing.T) {
+	cfgPath, dbPath := isolatedArgs(t)
+	m1 := newCLIMock()
+	_, out1, _ := runCLIWithCollector(t, synthDebianCollector(m1),
+		"--config", cfgPath, "--db", dbPath, "inventory", "--json")
+	m2 := newCLIMock()
+	_, out2, _ := runCLIWithCollector(t, synthDebianCollector(m2),
+		"--config", cfgPath, "--db", dbPath, "inventory", "--json")
+	if out1 != out2 {
+		t.Errorf("同输入 JSON 输出应稳定一致")
+	}
+}
+
+// TestInventoryJSONTimeUTC 验证时间字段为 UTC RFC3339。
+func TestInventoryJSONTimeUTC(t *testing.T) {
+	cfgPath, dbPath := isolatedArgs(t)
+	m := newCLIMock()
+	_, out, _ := runCLIWithCollector(t, synthDebianCollector(m),
+		"--config", cfgPath, "--db", dbPath, "inventory", "--json")
+	var parsed struct {
+		CollectedAt string `json:"collected_at"`
+	}
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("JSON 解析失败: %v", err)
+	}
+	// synthDebianCollector 的 Now 固定为 2026-01-01T00:00:00Z
+	if parsed.CollectedAt != "2026-01-01T00:00:00Z" {
+		t.Errorf("collected_at 应为 UTC RFC3339，实际 %q", parsed.CollectedAt)
+	}
+}
+
+// TestInventoryJSONSchemaVersion 验证 schema_version 存在且为预期常量。
+func TestInventoryJSONSchemaVersion(t *testing.T) {
+	cfgPath, dbPath := isolatedArgs(t)
+	m := newCLIMock()
+	_, out, _ := runCLIWithCollector(t, synthDebianCollector(m),
+		"--config", cfgPath, "--db", dbPath, "inventory", "--json")
+	var parsed struct {
+		SchemaVersion int `json:"schema_version"`
+	}
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("JSON 解析失败: %v", err)
+	}
+	if parsed.SchemaVersion != inventorySchemaVersion {
+		t.Errorf("schema_version 应为 %d，实际 %d", inventorySchemaVersion, parsed.SchemaVersion)
 	}
 }
