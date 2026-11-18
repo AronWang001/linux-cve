@@ -1,0 +1,60 @@
+name: version-diff
+
+# 原生版本比较差分测试（阶段 2 BLOCKED 项补做）
+#
+# 在对应 Linux 容器内，用 Go 实现与原生命令对同一组版本对做符号一致性比较。
+# 仅在 CI 的 Linux 容器中运行；本地 Windows 缺容器/原生命令时该测试保持 BLOCKED。
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "internal/version/**"
+      - "tests/vercmp_probe.go"
+      - "tests/version_diff.sh"
+      - "tests/version_diff_cases.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  version-diff:
+    name: 原生差分（${{ matrix.name }}）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Debian (dpkg)
+            image: debian:12
+            manager: dpkg
+            install: "true" # dpkg 已内置
+          - name: Fedora (rpm)
+            image: fedora:latest
+            manager: rpm
+            install: "true" # rpm >= 4.16 已内置，含 rpm.vercmp lua
+          - name: Alpine (apk)
+            image: alpine:3.20
+            manager: apk
+            install: "true" # apk 已内置
+          - name: Arch (pacman)
+            image: archlinux:latest
+            manager: pacman
+            install: "pacman -Sy --noconfirm pacman >/dev/null 2>&1 || true"
+
+    container:
+      image: ${{ matrix.image }}
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.4"
+
+      - name: 运行差分测试
+        run: |
+          bash tests/version_diff.sh "${{ matrix.manager }}"
