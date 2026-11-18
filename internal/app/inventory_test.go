@@ -254,6 +254,40 @@ func TestInventoryCommandSaveToUninitializedDB(t *testing.T) {
 	}
 }
 
+// TestInventoryCommandJSONSave 验证 --json --save 组合：stdout 必须是纯 JSON，
+// 保存状态经 saved_inventory_id 字段表达，不得污染 JSON 输出。
+func TestInventoryCommandJSONSave(t *testing.T) {
+	cfgPath, dbPath := isolatedArgs(t)
+	m := newCLIMock()
+	// 先迁移
+	code, _, errOut := runCLIWithCollector(t, synthDebianCollector(m),
+		"--config", cfgPath, "--db", dbPath, "db", "migrate")
+	if code != exitcode.OK {
+		t.Fatalf("迁移失败: %d（%s）", code, errOut)
+	}
+
+	code, out, errOut := runCLIWithCollector(t, synthDebianCollector(m),
+		"--config", cfgPath, "--db", dbPath, "inventory", "--json", "--save")
+	if code != exitcode.OK {
+		t.Fatalf("inventory --json --save 退出码应为 0，实际 %d（stderr: %s）", code, errOut)
+	}
+
+	// 整个 stdout 必须能作为单个 JSON 对象解析（首字符应为 '{'，不能有前导文本）
+	trimmed := strings.TrimSpace(out)
+	if !strings.HasPrefix(trimmed, "{") {
+		t.Errorf("--json --save 的 stdout 应以 JSON 开头，实际 %q", out)
+	}
+	var parsed struct {
+		SavedInventoryID *int64 `json:"saved_inventory_id"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+		t.Fatalf("--json --save 的 stdout 应能整体解析为 JSON: %v（原始 %q）", err, out)
+	}
+	if parsed.SavedInventoryID == nil || *parsed.SavedInventoryID <= 0 {
+		t.Errorf("saved_inventory_id 应为正整数，实际 %v", parsed.SavedInventoryID)
+	}
+}
+
 // ---- CLI inventory JSON DTO 专项测试 ----
 
 // TestInventoryJSONFieldNames 验证 JSON 字段全部为 snake_case，

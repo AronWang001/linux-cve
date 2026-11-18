@@ -51,6 +51,7 @@ func (e *env) runInventory(ctx context.Context, args []string) (exitcode.Code, e
 	}
 
 	// --save 持久化到数据库
+	var savedID *int64
 	if save {
 		d, err := database.Open(ctx, e.cfg.General.DBPath)
 		if err != nil {
@@ -62,22 +63,23 @@ func (e *env) runInventory(ctx context.Context, args []string) (exitcode.Code, e
 		if err != nil {
 			return apperr.CodeOf(err), err
 		}
-		if asJSON {
-			fmt.Fprintf(e.stdout, "saved inventory id=%d\n", invID)
-		} else {
-			fmt.Fprintf(e.stdout, "inventory saved (id=%d)\n", invID)
-		}
+		savedID = &invID
 	}
 
 	// 输出结果
 	if asJSON {
-		dto := buildInventoryJSON(result)
+		// 保存状态经 saved_inventory_id 字段表达，保证 stdout 始终是纯 JSON
+		dto := buildInventoryJSON(result, savedID)
 		b, err := json.MarshalIndent(dto, "", "  ")
 		if err != nil {
 			return exitcode.Error, apperr.Wrap(exitcode.Error, "inventory", "序列化采集结果失败", err)
 		}
 		fmt.Fprintln(e.stdout, string(b))
 		return exitcode.OK, nil
+	}
+
+	if savedID != nil {
+		fmt.Fprintf(e.stdout, "inventory saved (id=%d)\n", *savedID)
 	}
 
 	// 人类可读文本输出

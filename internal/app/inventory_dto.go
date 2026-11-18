@@ -18,13 +18,14 @@ const inventorySchemaVersion = 1
 // 序列化（PascalCase）不构成稳定协议。这里用显式 snake_case tag 固定字段名、
 // 顺序（struct 声明顺序即输出顺序）与空值语义，避免下游解析受内部模型重构影响。
 type inventoryJSON struct {
-	SchemaVersion int              `json:"schema_version"`
-	CollectedAt   string           `json:"collected_at"` // UTC RFC3339
-	Distro        inventoryDistro  `json:"distro"`
-	Kernel        inventoryKernel  `json:"kernel"`
-	Packages      []inventoryPkg   `json:"packages"`
-	Hash          string           `json:"hash"`
-	Warnings      []string         `json:"warnings"`
+	SchemaVersion     int             `json:"schema_version"`
+	CollectedAt       string          `json:"collected_at"` // UTC RFC3339
+	SavedInventoryID  *int64          `json:"saved_inventory_id,omitempty"` // 仅 --save 时有值
+	Distro            inventoryDistro `json:"distro"`
+	Kernel            inventoryKernel `json:"kernel"`
+	Packages          []inventoryPkg  `json:"packages"`
+	Hash              string          `json:"hash"`
+	Warnings          []string        `json:"warnings"`
 }
 
 // inventoryDistro 是发行版坐标。
@@ -62,8 +63,9 @@ type inventoryPkg struct {
 }
 
 // buildInventoryJSON 把采集结果转换为稳定 JSON 契约。
+// savedID 非 nil 时写入 saved_inventory_id（仅在 --save 时）。
 // 空切片统一为 []（非 null），空字符串显式输出 ""，时间为 UTC RFC3339。
-func buildInventoryJSON(r *inventory.Result) inventoryJSON {
+func buildInventoryJSON(r *inventory.Result, savedID *int64) inventoryJSON {
 	inv := r.Inventory
 
 	distro := inventoryDistro{
@@ -106,13 +108,14 @@ func buildInventoryJSON(r *inventory.Result) inventoryJSON {
 	}
 
 	return inventoryJSON{
-		SchemaVersion: inventorySchemaVersion,
-		CollectedAt:   formatTime(inv.CollectedAt),
-		Distro:        distro,
-		Kernel:        kernel,
-		Packages:      pkgs,
-		Hash:          inv.Hash,
-		Warnings:      warnings,
+		SchemaVersion:    inventorySchemaVersion,
+		CollectedAt:      formatTime(inv.CollectedAt),
+		SavedInventoryID: savedID,
+		Distro:           distro,
+		Kernel:           kernel,
+		Packages:         pkgs,
+		Hash:             inv.Hash,
+		Warnings:         warnings,
 	}
 }
 
