@@ -8,9 +8,10 @@ import "runtime"
 var (
 	// Version 是语义化版本号，开发期为 2.0.0-dev。
 	Version = "2.0.0-dev"
-	// Commit 是构建时的提交短哈希。
-	Commit = "none"
-	// BuildDate 是构建时间，RFC3339。
+	// Commit 是构建时的提交短哈希；未注入时显示 unknown，
+	// 不得回退为任何基线/历史提交号冒充当前构建。
+	Commit = "unknown"
+	// BuildDate 是构建时间，RFC3339；未注入时显示 unknown。
 	BuildDate = "unknown"
 )
 

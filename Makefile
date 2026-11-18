@@ -8,7 +8,7 @@
 BINARY     := linux-cve
 MODULE     := github.com/AronWang001/linux-cve-2026-98432-fix
 VERSION    ?= 2.0.0-dev
-COMMIT     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
+COMMIT     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 DIST       := dist
 
