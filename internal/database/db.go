@@ -61,7 +61,15 @@ func Open(ctx context.Context, path string) (*DB, error) {
 		return nil, apperr.Wrap(exitcode.Error, "database.open",
 			fmt.Sprintf("打开数据库失败: %s", abs), err)
 	}
-	return &DB{db: h, path: abs}, nil
+
+	d := &DB{db: h, path: abs}
+	// 数据库高于本二进制的 Schema 版本时拒绝打开（含只读命令），
+	// 防止旧程序误读未知表结构或写坏新库。
+	if err := guardSchemaAge(ctx, d); err != nil {
+		_ = h.Close()
+		return nil, err
+	}
+	return d, nil
 }
 
 // buildDSN 拼装 modernc sqlite 的 DSN，PRAGMA 通过 _pragma 参数在连接建立时生效。

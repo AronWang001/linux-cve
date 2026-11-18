@@ -140,13 +140,21 @@ func TestSeedData(t *testing.T) {
 		t.Errorf("Debian 12 应为 active，实际 %q", debian12)
 	}
 
+	// schema 版本唯一权威来源是 schema_migrations，app_meta 不再冗余 schema_version
 	var schemaVersion string
-	if err := d.SQL().QueryRowContext(ctx,
-		`SELECT value FROM app_meta WHERE key = 'schema_version'`).Scan(&schemaVersion); err != nil {
-		t.Fatalf("读取 schema_version 失败: %v", err)
+	err := d.SQL().QueryRowContext(ctx,
+		`SELECT value FROM app_meta WHERE key = 'schema_version'`).Scan(&schemaVersion)
+	if err == nil {
+		t.Errorf("app_meta 不应再冗余 schema_version，实际存在值 %q", schemaVersion)
 	}
-	if schemaVersion != "1" {
-		t.Errorf("app_meta.schema_version 应为 1，实际 %q", schemaVersion)
+
+	var maxVer int
+	if err := d.SQL().QueryRowContext(ctx,
+		`SELECT MAX(version) FROM schema_migrations`).Scan(&maxVer); err != nil {
+		t.Fatalf("读取 schema_migrations 失败: %v", err)
+	}
+	if maxVer != 1 {
+		t.Errorf("schema_migrations 最大版本应为 1，实际 %d", maxVer)
 	}
 }
 
@@ -171,9 +179,9 @@ func insertFix(t *testing.T, d *DB, distroID, release, channel, pkg, version str
 	t.Helper()
 	_, err := d.SQL().ExecContext(context.Background(),
 		`INSERT INTO advisory_fixes
-		 (advisory_uid, source_id, advisory_id, cve_id, distro_id, release, channel,
+		 (source_id, advisory_id, cve_id, distro_id, release, channel,
 		  package_kind, package_name, arch, fixed_version_raw, fixed_version)
-		 VALUES ('DSA-1-CVE-2026-0001','debian-tracker','DSA-1','CVE-2026-0001',?,?,?,'source',?,'any',?,?)`,
+		 VALUES ('debian-tracker','DSA-1','CVE-2026-0001',?,?,?,'source',?,'any',?,?)`,
 		distroID, release, channel, pkg, version, version)
 	return err
 }
@@ -282,12 +290,12 @@ func TestMeta(t *testing.T) {
 	if _, err := d.Migrate(ctx); err != nil {
 		t.Fatalf("迁移失败: %v", err)
 	}
-	v, err := d.Meta(ctx, "schema_version")
+	v, err := d.Meta(ctx, "db_created_at")
 	if err != nil {
 		t.Fatalf("读取元信息失败: %v", err)
 	}
-	if v != "1" {
-		t.Errorf("schema_version 应为 1，实际 %q", v)
+	if v == "" {
+		t.Error("db_created_at 不应为空")
 	}
 	missing, err := d.Meta(ctx, "absent_key")
 	if err != nil || missing != "" {
@@ -321,5 +329,213 @@ func TestWALAndForeignKeysEnabled(t *testing.T) {
 	}
 	if fk != 1 {
 		t.Errorf("foreign_keys 应开启，实际 %d", fk)
+	}
+}
+
+// TestCompositeReleaseFK 固化 P1-4：distro_id + release 必须整体锚定 distro_releases，
+// 合法发行版配非法 release 也必须被拒绝。
+func TestCompositeReleaseFK(t *testing.T) {
+	ctx := context.Background()
+	d := newTestDB(t)
+	if _, err := d.Migrate(ctx); err != nil {
+		t.Fatalf("迁移失败: %v", err)
+	}
+	seedAdvisory(t, d, "debian-tracker", "DSA-1", "CVE-2026-0001")
+
+	if err := insertFix(t, d, "debian", "99", "bookworm-security", "openssl", "3.0.11-1"); err == nil {
+		t.Error("debian:99 不存在，组合外键应拒绝")
+	}
+	if err := insertFix(t, d, "debian", "12", "bookworm-security", "openssl", "3.0.11-1"); err != nil {
+		t.Errorf("debian:12 存在，应接受: %v", err)
+	}
+
+	// advisory_not_affected 同样受组合外键约束
+	_, err := d.SQL().ExecContext(ctx,
+		`INSERT INTO advisory_not_affected
+		 (source_id, cve_id, distro_id, release, package_kind, package_name, arch, reason)
+		 VALUES ('debian-tracker','CVE-2026-0001','debian','99','source','linux','any','not-affected')`)
+	if err == nil {
+		t.Error("not_affected 的 debian:99 应被组合外键拒绝")
+	}
+	_, err = d.SQL().ExecContext(ctx,
+		`INSERT INTO advisory_not_affected
+		 (source_id, cve_id, distro_id, release, package_kind, package_name, arch, reason)
+		 VALUES ('debian-tracker','CVE-2026-0001','debian','12','source','linux','any','not-affected')`)
+	if err != nil {
+		t.Errorf("not_affected 的 debian:12 应接受: %v", err)
+	}
+}
+
+// TestAdvisoryTripleFK 固化 P1-4：修复记录的公告三元组必须指向真实公告行。
+func TestAdvisoryTripleFK(t *testing.T) {
+	ctx := context.Background()
+	d := newTestDB(t)
+	if _, err := d.Migrate(ctx); err != nil {
+		t.Fatalf("迁移失败: %v", err)
+	}
+	seedAdvisory(t, d, "debian-tracker", "DSA-1", "CVE-2026-0001")
+
+	_, err := d.SQL().ExecContext(ctx,
+		`INSERT INTO advisory_fixes
+		 (source_id, advisory_id, cve_id, distro_id, release, channel,
+		  package_kind, package_name, arch, fixed_version_raw, fixed_version)
+		 VALUES ('debian-tracker','DSA-9999','CVE-2026-0001','debian','12','bookworm-security',
+		         'source','openssl','any','3.0.11-1','3.0.11-1')`)
+	if err == nil {
+		t.Error("未登记的公告三元组应被组合外键拒绝")
+	}
+
+	// 删除公告应级联清理修复记录
+	if err := insertFix(t, d, "debian", "12", "bookworm-security", "openssl", "3.0.11-1"); err != nil {
+		t.Fatalf("插入修复记录失败: %v", err)
+	}
+	if _, err := d.SQL().ExecContext(ctx,
+		`DELETE FROM advisories WHERE advisory_id = 'DSA-1'`); err != nil {
+		t.Fatalf("删除公告失败: %v", err)
+	}
+	var n int
+	if err := d.SQL().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM advisory_fixes`).Scan(&n); err != nil {
+		t.Fatalf("统计失败: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("删除公告后修复记录应级联删除，实际残留 %d 条", n)
+	}
+}
+
+// TestFeedSourceSignatureIntegrity 固化 P1-5：签名状态与完整性状态独立、各有默认值。
+func TestFeedSourceSignatureIntegrity(t *testing.T) {
+	ctx := context.Background()
+	d := newTestDB(t)
+	if _, err := d.Migrate(ctx); err != nil {
+		t.Fatalf("迁移失败: %v", err)
+	}
+
+	// 默认值：未验证签名、未比对哈希
+	if _, err := d.SQL().ExecContext(ctx,
+		`INSERT INTO feed_sources (id, name, kind, url, trust_level) VALUES ('src-a','A','api','https://a','B')`); err != nil {
+		t.Fatalf("插入情报源失败: %v", err)
+	}
+	var sig, integ string
+	if err := d.SQL().QueryRowContext(ctx,
+		`SELECT signature_status, integrity_status FROM feed_sources WHERE id='src-a'`).Scan(&sig, &integ); err != nil {
+		t.Fatalf("读取状态失败: %v", err)
+	}
+	if sig != "unverified" || integ != "unchecked" {
+		t.Errorf("默认状态应为 unverified/unchecked，实际 %q/%q", sig, integ)
+	}
+
+	// 可写入合法组合：B 级源 = 无签名 + 哈希通过
+	if _, err := d.SQL().ExecContext(ctx,
+		`UPDATE feed_sources SET signature_status='not-applicable', integrity_status='verified' WHERE id='src-a'`); err != nil {
+		t.Errorf("合法状态组合应被接受: %v", err)
+	}
+
+	// 非法枚举必须被 CHECK 拒绝
+	if _, err := d.SQL().ExecContext(ctx,
+		`UPDATE feed_sources SET signature_status='verified-by-hash' WHERE id='src-a'`); err == nil {
+		t.Error("非法 signature_status 应被 CHECK 拒绝")
+	}
+	if _, err := d.SQL().ExecContext(ctx,
+		`UPDATE feed_sources SET integrity_status='signed' WHERE id='src-a'`); err == nil {
+		t.Error("非法 integrity_status 应被 CHECK 拒绝")
+	}
+}
+
+// TestApplyOneRollbackOnError 固化 P1-6：迁移执行失败必须整体回滚，不留半成品。
+func TestApplyOneRollbackOnError(t *testing.T) {
+	ctx := context.Background()
+	d := newTestDB(t)
+
+	// applyOne 不负责建 schema_migrations（由 Migrate 统一创建），此处补前置
+	if _, err := d.SQL().ExecContext(ctx, createMigrationsTable); err != nil {
+		t.Fatalf("创建迁移记录表失败: %v", err)
+	}
+
+	bad := Migration{Version: 1, Name: "bad", SQL: "THIS IS NOT SQL;", Checksum: "x"}
+	if err := d.applyOne(ctx, bad); err == nil {
+		t.Fatal("非法 SQL 应报错")
+	}
+
+	// 不得留下迁移记录
+	var n int
+	if err := d.SQL().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM schema_migrations`).Scan(&n); err != nil {
+		t.Fatalf("统计迁移记录失败: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("失败迁移不得留下记录，实际 %d 条", n)
+	}
+}
+
+// TestValidateAppliedConsistency 固化 P1-6：版本不一致的各类形态都必须拒绝。
+func TestValidateAppliedConsistency(t *testing.T) {
+	migs, err := LoadMigrations()
+	if err != nil {
+		t.Fatalf("加载迁移失败: %v", err)
+	}
+	// 构造两份内嵌迁移，覆盖缺档分支
+	two := append([]Migration{}, migs...)
+	if len(two) == 1 {
+		two = append(two, Migration{Version: 2, Name: "future", SQL: "SELECT 1;", Checksum: "c2"})
+	}
+	ok := AppliedMigration{Version: 1, Name: migs[0].Name, Checksum: migs[0].Checksum, AppliedAt: "now"}
+
+	if err := validateApplied(nil, two); err != nil {
+		t.Errorf("空已应用列表应合法: %v", err)
+	}
+	if err := validateApplied([]AppliedMigration{ok}, two); err != nil {
+		t.Errorf("完全一致时应合法: %v", err)
+	}
+
+	// 校验和篡改
+	tampered := ok
+	tampered.Checksum = "bad"
+	if err := validateApplied([]AppliedMigration{tampered}, two); err == nil {
+		t.Error("校验和不一致应拒绝")
+	}
+
+	// 库版本高于二进制
+	newer := AppliedMigration{Version: 99, Name: "x", Checksum: "y", AppliedAt: "now"}
+	if err := validateApplied([]AppliedMigration{newer}, two); err == nil {
+		t.Error("库版本高于内嵌应拒绝")
+	}
+
+	// 迁移序列缺档：应用了 2 却没应用 1
+	if len(two) > 1 {
+		gap := AppliedMigration{Version: 2, Name: two[1].Name, Checksum: two[1].Checksum, AppliedAt: "now"}
+		if err := validateApplied([]AppliedMigration{gap}, two); err == nil {
+			t.Error("迁移缺档应拒绝")
+		}
+	}
+}
+
+// TestOpenRejectsNewerSchema 固化 P1-6：旧二进制连打开都不允许。
+func TestOpenRejectsNewerSchema(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "linux-cve.db")
+
+	d, err := Open(ctx, path)
+	if err != nil {
+		t.Fatalf("打开失败: %v", err)
+	}
+	if _, err := d.Migrate(ctx); err != nil {
+		t.Fatalf("迁移失败: %v", err)
+	}
+	if _, err := d.SQL().ExecContext(ctx,
+		`UPDATE schema_migrations SET version = 99 WHERE version = 1`); err != nil {
+		t.Fatalf("伪造新版本失败: %v", err)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatalf("关闭失败: %v", err)
+	}
+
+	_, err = Open(ctx, path)
+	if err == nil {
+		t.Fatal("Schema 高于二进制时 Open 应拒绝")
+	}
+	if got := apperr.CodeOf(err); got != exitcode.Integrity {
+		t.Errorf("退出码应为 INTEGRITY，实际 %v", got)
 	}
 }

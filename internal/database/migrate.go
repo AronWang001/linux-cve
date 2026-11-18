@@ -135,31 +135,13 @@ func (d *DB) Migrate(ctx context.Context) (int, error) {
 		return 0, err
 	}
 
-	byVersion := make(map[int]Migration, len(migrations))
-	maxEmbedded := 0
-	for _, m := range migrations {
-		byVersion[m.Version] = m
-		if m.Version > maxEmbedded {
-			maxEmbedded = m.Version
-		}
+	if err := validateApplied(applied, migrations); err != nil {
+		return 0, err
 	}
 
 	appliedSet := make(map[int]struct{}, len(applied))
 	for _, a := range applied {
 		appliedSet[a.Version] = struct{}{}
-		m, ok := byVersion[a.Version]
-		if !ok {
-			if a.Version > maxEmbedded {
-				return 0, apperr.Newf(exitcode.Integrity, "database.migrate",
-					"数据库 Schema 版本 %d 高于本程序内置版本 %d，请升级 linux-cve", a.Version, maxEmbedded)
-			}
-			return 0, apperr.Newf(exitcode.Integrity, "database.migrate",
-				"数据库中存在本程序不认识的迁移记录: %04d_%s", a.Version, a.Name)
-		}
-		if a.Checksum != m.Checksum {
-			return 0, apperr.Newf(exitcode.Integrity, "database.migrate",
-				"迁移 %04d_%s 校验和不一致，数据库可能被手工修改", a.Version, a.Name)
-		}
 	}
 
 	count := 0
@@ -173,6 +155,95 @@ func (d *DB) Migrate(ctx context.Context) (int, error) {
 		count++
 	}
 	return count, nil
+}
+
+// validateApplied 校验已应用迁移与内嵌迁移的一致性。
+//
+// schema_migrations 是 Schema 版本的唯一权威来源。以下任一不一致都拒绝继续迁移：
+//   - 库中存在二进制不认识的迁移记录
+//   - 库 Schema 版本高于二进制内嵌版本（旧二进制不得操作新库）
+//   - 已应用迁移的 checksum 与内嵌文件不符（防手改库）
+//   - 迁移序列缺档（低版本未应用却存在更高版本记录，说明库被破坏或降级混用）
+func validateApplied(applied []AppliedMigration, migrations []Migration) error {
+	if len(migrations) == 0 {
+		return apperr.New(exitcode.Error, "database.migrate", "未找到任何内嵌迁移")
+	}
+	byVersion := make(map[int]Migration, len(migrations))
+	maxEmbedded := 0
+	for _, m := range migrations {
+		byVersion[m.Version] = m
+		if m.Version > maxEmbedded {
+			maxEmbedded = m.Version
+		}
+	}
+
+	seen := make(map[int]struct{}, len(applied))
+	maxApplied := 0
+	for _, a := range applied {
+		seen[a.Version] = struct{}{}
+		if a.Version > maxApplied {
+			maxApplied = a.Version
+		}
+		m, ok := byVersion[a.Version]
+		if !ok {
+			if a.Version > maxEmbedded {
+				return apperr.Newf(exitcode.Integrity, "database.migrate",
+					"数据库 Schema 版本 %d 高于本程序内置版本 %d，请升级 linux-cve", a.Version, maxEmbedded)
+			}
+			return apperr.Newf(exitcode.Integrity, "database.migrate",
+				"数据库中存在本程序不认识的迁移记录: %04d_%s", a.Version, a.Name)
+		}
+		if a.Checksum != m.Checksum {
+			return apperr.Newf(exitcode.Integrity, "database.migrate",
+				"迁移 %04d_%s 校验和不一致，数据库可能被手工修改", a.Version, a.Name)
+		}
+	}
+
+	for _, m := range migrations {
+		if m.Version >= maxApplied {
+			break
+		}
+		if _, ok := seen[m.Version]; !ok {
+			return apperr.Newf(exitcode.Integrity, "database.migrate",
+				"迁移序列缺档：%04d_%s 未应用却存在更高版本记录 %d，数据库不一致",
+				m.Version, m.Name, maxApplied)
+		}
+	}
+	return nil
+}
+
+// guardSchemaAge 在 Open 时拒绝 Schema 高于内置版本的数据库。
+// 连只读命令也不得打开新库，避免旧二进制误读未知表结构。
+func guardSchemaAge(ctx context.Context, d *DB) error {
+	has, err := d.hasTable(ctx, "schema_migrations")
+	if err != nil {
+		return apperr.Wrap(exitcode.Error, "database.open", "探测迁移表失败", err)
+	}
+	if !has {
+		return nil
+	}
+	var maxDB sql.NullInt64
+	if err := d.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&maxDB); err != nil {
+		return apperr.Wrap(exitcode.Error, "database.open", "读取 Schema 版本失败", err)
+	}
+	if !maxDB.Valid {
+		return nil
+	}
+	migrations, err := LoadMigrations()
+	if err != nil {
+		return err
+	}
+	maxEmbedded := 0
+	for _, m := range migrations {
+		if m.Version > maxEmbedded {
+			maxEmbedded = m.Version
+		}
+	}
+	if int(maxDB.Int64) > maxEmbedded {
+		return apperr.Newf(exitcode.Integrity, "database.open",
+			"数据库 Schema 版本 %d 高于本程序内置版本 %d，请升级 linux-cve", int(maxDB.Int64), maxEmbedded)
+	}
+	return nil
 }
 
 // applyOne 在单个事务内执行一个迁移并记录。
