@@ -112,8 +112,8 @@ func TestInventoryCommandJSON(t *testing.T) {
 		t.Fatalf("inventory --json 退出码应为 0，实际 %d（stderr: %s）", code, errOut)
 	}
 	var parsed struct {
-		SchemaVersion int      `json:"schema_version"`
-		CollectedAt   string   `json:"collected_at"`
+		SchemaVersion int    `json:"schema_version"`
+		CollectedAt   string `json:"collected_at"`
 		Distro        struct {
 			ID string `json:"id"`
 		} `json:"distro"`

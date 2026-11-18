@@ -18,38 +18,38 @@ const inventorySchemaVersion = 1
 // 序列化（PascalCase）不构成稳定协议。这里用显式 snake_case tag 固定字段名、
 // 顺序（struct 声明顺序即输出顺序）与空值语义，避免下游解析受内部模型重构影响。
 type inventoryJSON struct {
-	SchemaVersion     int             `json:"schema_version"`
-	CollectedAt       string          `json:"collected_at"` // UTC RFC3339
-	SavedInventoryID  *int64          `json:"saved_inventory_id,omitempty"` // 仅 --save 时有值
-	Distro            inventoryDistro `json:"distro"`
-	Kernel            inventoryKernel `json:"kernel"`
-	Packages          []inventoryPkg  `json:"packages"`
-	Hash              string          `json:"hash"`
-	Warnings          []string        `json:"warnings"`
+	SchemaVersion    int             `json:"schema_version"`
+	CollectedAt      string          `json:"collected_at"`                 // UTC RFC3339
+	SavedInventoryID *int64          `json:"saved_inventory_id,omitempty"` // 仅 --save 时有值
+	Distro           inventoryDistro `json:"distro"`
+	Kernel           inventoryKernel `json:"kernel"`
+	Packages         []inventoryPkg  `json:"packages"`
+	Hash             string          `json:"hash"`
+	Warnings         []string        `json:"warnings"`
 }
 
 // inventoryDistro 是发行版坐标。
 type inventoryDistro struct {
-	ID      string `json:"id"`      // domain.DistroID 规范值
-	OSID    string `json:"os_id"`   // /etc/os-release 的 ID 原值
-	Name    string `json:"name"`
-	Release string `json:"release"`
+	ID       string `json:"id"`    // domain.DistroID 规范值
+	OSID     string `json:"os_id"` // /etc/os-release 的 ID 原值
+	Name     string `json:"name"`
+	Release  string `json:"release"`
 	Codename string `json:"codename"`
-	Arch    string `json:"arch"`
-	Manager string `json:"manager"`
+	Arch     string `json:"arch"`
+	Manager  string `json:"manager"`
 }
 
 // inventoryKernel 是内核相关信息，仅含可证明的事实。
 type inventoryKernel struct {
-	Running  string `json:"running"`   // uname -r 原值
-	Package  string `json:"package"`   // 精确证据映射的包名，否则空
-	Version  string `json:"version"`   // 该包版本，否则空
-	Evidence string `json:"evidence"`  // 映射依据，Package 为空时也为空
+	Running  string `json:"running"`  // uname -r 原值
+	Package  string `json:"package"`  // 精确证据映射的包名，否则空
+	Version  string `json:"version"`  // 该包版本，否则空
+	Evidence string `json:"evidence"` // 映射依据，Package 为空时也为空
 }
 
 // inventoryPkg 是单个已安装包。版本原始串无损保留。
 type inventoryPkg struct {
-	Kind          string `json:"kind"`           // 恒为 "binary"
+	Kind          string `json:"kind"` // 恒为 "binary"
 	Name          string `json:"name"`
 	Arch          string `json:"arch"`
 	Version       string `json:"version"`        // 原始版本串，逐字保留
@@ -58,7 +58,7 @@ type inventoryPkg struct {
 	Manager       string `json:"manager"`
 	OriginChannel string `json:"origin_channel"` // 可证明来源，否则 "unknown"
 	Vendor        string `json:"vendor"`
-	InstallTime   string `json:"install_time"`   // UTC RFC3339；未知时为空串
+	InstallTime   string `json:"install_time"` // UTC RFC3339；未知时为空串
 	EntryHash     string `json:"entry_hash"`
 }
 
