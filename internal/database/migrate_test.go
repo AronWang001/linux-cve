@@ -68,18 +68,18 @@ func TestMigrateFreshDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("首次迁移失败: %v", err)
 	}
-	if n != 1 {
-		t.Errorf("首次应应用 1 个迁移，实际 %d", n)
+	if n != 2 {
+		t.Errorf("首次应应用 2 个迁移，实际 %d", n)
 	}
 
 	st, err := d.Status(ctx)
 	if err != nil {
 		t.Fatalf("读取状态失败: %v", err)
 	}
-	if st.SchemaVersion != 1 {
-		t.Errorf("schema 版本应为 1，实际 %d", st.SchemaVersion)
+	if st.SchemaVersion != 2 {
+		t.Errorf("schema 版本应为 2，实际 %d", st.SchemaVersion)
 	}
-	if len(st.Applied) != 1 || st.Applied[0].Name != "init" {
+	if len(st.Applied) != 2 || st.Applied[0].Name != "init" || st.Applied[1].Name != "inventory" {
 		t.Errorf("已应用记录不符: %+v", st.Applied)
 	}
 	if len(st.Pending) != 0 {
@@ -153,8 +153,8 @@ func TestSeedData(t *testing.T) {
 		`SELECT MAX(version) FROM schema_migrations`).Scan(&maxVer); err != nil {
 		t.Fatalf("读取 schema_migrations 失败: %v", err)
 	}
-	if maxVer != 1 {
-		t.Errorf("schema_migrations 最大版本应为 1，实际 %d", maxVer)
+	if maxVer != 2 {
+		t.Errorf("schema_migrations 最大版本应为 2，实际 %d", maxVer)
 	}
 }
 
