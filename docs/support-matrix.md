@@ -66,3 +66,36 @@
 | zypper | `pkg=version` | `--dry-run` | zypp 锁 | ❌ 后续 |
 | apk | `pkg=version` | `--simulate` | `/lib/apk/db/lock` | ❌ 后续 |
 | pacman | 无法固定旧版本 | 无可靠预演 | `db.lck` | ❌ 不开放 |
+
+## 5. 资产采集与版本比较支持矩阵 `[阶段 2]`
+
+验证程度分四级，不得混写：
+
+| 级别 | 含义 |
+|------|------|
+| **A. 上游源码语义核对** | 已研读并留存上游 C/C++ 源码，算法忠实移植 |
+| **B. 本地 Go 单元测试** | 合成夹具（SYNTHETIC）驱动的 Go 测试通过 |
+| **C. 原生工具差分测试** | 用真实 `dpkg --compare-versions` / `rpmdev-vercmp` / `apk version` / `vercmp` 与 Go 实现逐一比对 |
+| **D. Linux 实机验证** | 在真实 Linux 发行版上跑 `linux-cve inventory` 并核对结果 |
+
+### 5.1 版本比较引擎
+
+| 管理器 | A 源码核对 | B 单元测试 | C 原生差分 | D 实机验证 |
+|--------|-----------|-----------|-----------|-----------|
+| Debian dpkg | ✅ | ✅ | ❌ BLOCKED | ❌ 未做 |
+| RPM | ✅ | ✅ | ❌ BLOCKED | ❌ 未做 |
+| Alpine apk | ✅ | ✅ | ❌ BLOCKED | ❌ 未做 |
+| Arch pacman | ✅ | ✅ | ❌ BLOCKED | ❌ 未做 |
+
+> **C 级 BLOCKED 原因**：开发环境为 Windows Git Bash，本机无 `dpkg` / `rpm` / `apk` / `pacman` / `vercmp`，且任务书禁止为此安装系统软件。差分测试须在后续阶段于 Linux 环境补做。
+
+### 5.2 资产采集
+
+| 管理器 | 采集命令 | B 单元测试（SYNTHETIC） | D 实机验证 |
+|--------|----------|------------------------|-----------|
+| dpkg | `dpkg-query -W -f=...` | ✅ | ❌ 未做 |
+| rpm | `rpm -qa --qf ...` | ✅ | ❌ 未做 |
+| apk | `apk list --manifest` + `apk list --installed -v` | ✅ | ❌ 未做 |
+| pacman | `pacman -Qi` | ✅ | ❌ 未做 |
+
+所有单元测试夹具均为 **SYNTHETIC**（按各工具 man page / 上游源码格式手工构造），**不是**实机采集样本。Linux 实机验证（D 级）留待后续阶段。
