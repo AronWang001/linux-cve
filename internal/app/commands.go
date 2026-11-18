@@ -152,6 +152,7 @@ func (e *env) printHelp(w io.Writer) {
   linux-cve [全局参数] <命令> [命令参数]
 
 命令:
+  inventory         采集本机资产（软件包、内核、发行版）
   scan              扫描本机漏洞
   list              列出扫描结果
   show <CVE>        查看单个 CVE 详情与判定依据
@@ -186,6 +187,8 @@ func (e *env) printCommandHelp(w io.Writer, cmd string) {
 		fmt.Fprint(w, "用法: linux-cve version [--json]\n")
 	case "db":
 		fmt.Fprint(w, "用法: linux-cve db status | linux-cve db migrate\n")
+	case "inventory":
+		fmt.Fprint(w, "用法: linux-cve inventory [--json] [--save]\n\n  采集本机资产（软件包、内核、发行版）。\n  --json   以 JSON 输出采集结果\n  --save   将采集结果持久化到数据库\n")
 	case "scan", "list", "show", "plan", "fix", "report", "feed", "support":
 		fmt.Fprintf(w, "%s 尚未实现（%s），当前为阶段 1，仅 version / db / help 可用。\n", cmd, phaseOf(cmd))
 	default:
