@@ -1,4 +1,4 @@
-# Linux CVE Fix v2.0 架构设计（阶段 1 修订版）
+# Linux CVE Fix v2.0 架构设计（阶段 2 修订版）
 
 - 版本：2.0.0-draft.2
 - 基线：v1.3.2（`ec1415b`）
@@ -318,6 +318,26 @@ adapters/                 发行版适配（Go 代码，不是 shell）
 ```
 
 依赖方向：`app → (planner|remediation|matcher|report|inventory) → domain`；`feed → domain + database`；`domain` 不 import 任何内部包（零依赖）。此约束用 `go vet` 之外的检查保证：`internal/domain` 只允许 import 标准库（Phase 1 测试断言 import 图）。
+
+### 8.1 资产采集模块（inventory）`[阶段 2]`
+
+`internal/inventory` 负责只读采集本机资产：
+
+- **采集内容**：发行版（`/etc/os-release`）、架构（`uname -m`）、内核（`uname -r`）、软件包清单（dpkg / rpm / apk / pacman）。
+- **只读约束**：`Runner` 接口抽象命令执行，`ExecRunner` 用 `exec.CommandContext` 固定参数（无 Shell 拼接）、默认 30s 超时、64 MiB 输出上限，超时/非零退出/输出超限分别报错。绝不执行 `apt update` / `dnf makecache` / `apk update` / `pacman -Sy`。
+- **证据规则**：`SourceName` 只在采集工具有可靠输出时填写（dpkg `${Source}`、rpm `SOURCERPM`、apk `{origin}`），pacman 无 pkgbase 留空，禁止字符串前缀猜测；`OriginChannel` 无法证明一律 `ChannelUnknown`；内核映射只接受精确证据。
+- **产出**：`domain.Inventory` 快照（含顺序无关的 SHA256 哈希），供 matcher 与修复前一致性复核使用。
+
+### 8.2 版本比较模块（version）`[阶段 2]`
+
+`internal/version` 实现四类包管理器的**原生**版本比较，忠实移植上游源码：
+
+- Debian `dpkg`：`verrevcmp` + Policy 5.6.12「最后连字符切分」+ `~` 早于一切；
+- RPM：`rpmvercmp.cc` 现代语义（`~` 早于一切、`^` 晚于串尾早于字母数字）；
+- Alpine `apk`：`version.c` tokenizer（预发布/后发布后缀、前导零串比较）；
+- Arch `pacman`：`alpm_pkg_vercmp`（旧 rpm 语义怪癖，如 release 仅两侧都存在才比较）。
+
+硬约束：禁止用 Go 字符串比较替代；显式指定管理器，跨管理器禁止直接比较；非法版本明确报错；原始版本串无损保留。
 
 ---
 

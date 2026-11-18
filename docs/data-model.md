@@ -405,6 +405,67 @@ CREATE TABLE cve_references (
 
 `cves.severity` 仅用于展示与排序，**不参与** `VulnState` 计算。
 
+### 4.7 资产快照 `[阶段 2]`
+
+一次采集 = 一行 `inventories` + N 行 `inventory_packages` + 一行 `kernel_state`。只存事实，不存任何漏洞判定或修复结论（那些在 0003/0004）。
+
+```sql
+CREATE TABLE inventories (
+    id                INTEGER PRIMARY KEY,
+    distro_id         TEXT NOT NULL REFERENCES distros(id),
+    release           TEXT NOT NULL,                  -- VERSION_ID，自由文本（允许未登记 release）
+    codename          TEXT NOT NULL DEFAULT '',
+    arch              TEXT NOT NULL,                  -- uname -m 原值
+    kernel_running    TEXT NOT NULL DEFAULT '',       -- uname -r 原值
+    package_manager   TEXT NOT NULL DEFAULT 'none'
+                      CHECK (package_manager IN ('dpkg','rpm','apk','pacman','none')),
+    package_count     INTEGER NOT NULL DEFAULT 0,
+    collected_at      TEXT NOT NULL,
+    hash              TEXT NOT NULL,                  -- 快照哈希（顺序无关）
+    collector_version TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE inventory_packages (
+    id                 INTEGER PRIMARY KEY,
+    inventory_id       INTEGER NOT NULL REFERENCES inventories(id) ON DELETE CASCADE,
+    package_kind       TEXT NOT NULL CHECK (package_kind IN ('source','binary')),
+    name               TEXT NOT NULL,
+    arch               TEXT NOT NULL,                 -- 原生架构标识逐字保留
+    version_raw        TEXT NOT NULL,                 -- 原始版本串，无损保留
+    version_epoch      INTEGER NOT NULL DEFAULT 0,
+    version_upstream   TEXT NOT NULL DEFAULT '',
+    version_release    TEXT NOT NULL DEFAULT '',
+    source_name        TEXT NOT NULL DEFAULT '',      -- 空 = 桥接失败
+    source_version_raw TEXT NOT NULL DEFAULT '',
+    manager            TEXT NOT NULL
+                       CHECK (manager IN ('dpkg','rpm','apk','pacman','none')),
+    origin_channel     TEXT NOT NULL DEFAULT 'unknown',
+    origin_evidence    TEXT NOT NULL DEFAULT '',
+    vendor             TEXT NOT NULL DEFAULT '',
+    install_time       TEXT,                          -- RFC3339，未知为 NULL
+    entry_hash         TEXT NOT NULL DEFAULT '',
+    UNIQUE (inventory_id, package_kind, name, arch)
+);
+
+CREATE TABLE kernel_state (
+    id                  INTEGER PRIMARY KEY,
+    inventory_id        INTEGER NOT NULL UNIQUE REFERENCES inventories(id) ON DELETE CASCADE,
+    running_version     TEXT NOT NULL DEFAULT '',
+    kernel_package      TEXT NOT NULL DEFAULT '',     -- 无精确证据为空
+    package_version_raw TEXT NOT NULL DEFAULT '',
+    mapping_evidence    TEXT NOT NULL DEFAULT ''      -- 空 = 未认定映射
+);
+```
+
+关键约束与证据规则：
+
+- `inventories.release` **不设外键**：资产采集是事实记录，允许未登记 release 落库（生命周期未知），修复准入在 planner 阶段另行查 `distro_releases`。
+- `inventory_packages` 的 `UNIQUE(inventory_id, package_kind, name, arch)` 锚定「哪个快照里的哪个包身份」，重复包在同一快照内被拒绝。
+- `source_name` 为空 = 源码包桥接失败（dpkg `${Source}` 空 / rpm `SOURCERPM=(none)` / pacman 无 pkgbase），禁止用包名前缀猜测。
+- `origin_channel` 无法证明时一律 `unknown`，禁止猜测；非 `unknown` 时 `origin_evidence` 必填。
+- `kernel_state.mapping_evidence` 为空表示未认定内核映射（apk/pacman 或映射不上时内核包名留空）。
+- 快照 `hash` 是顺序无关的 SHA256（见 `Inventory.ComputeHash`），用于执行前一致性复核。
+
 ---
 
 ## 5. 匹配算法（阶段 3 实现，此处定契约）

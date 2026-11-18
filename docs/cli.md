@@ -4,6 +4,7 @@
 
 | 命令 | 作用 | 阶段 |
 |------|------|------|
+| `linux-cve inventory [--json] [--save]` | 采集本机资产（发行版、内核、软件包清单），可持久化 | 2 |
 | `linux-cve scan` | 采集资产 + 匹配情报，输出漏洞清单 | 3 |
 | `linux-cve list` | 列出上一次扫描结果（支持 `--severity`、`--state`） | 3 |
 | `linux-cve show <CVE>` | 展示单条 CVE 的判定依据与证据 | 3 |
@@ -18,7 +19,7 @@
 | `linux-cve version` | 打印版本、提交、构建时间、Go 版本 | 1 |
 | `linux-cve help [cmd]` | 帮助 | 1 |
 
-阶段 1 只实现 `version`、`help`、`db status`、`db migrate`；其余子命令已注册但返回 `NOT_IMPLEMENTED`（退出码 8），不会静默成功。
+阶段 2 已实现 `inventory` 命令；阶段 1 已实现 `version`、`help`、`db status`、`db migrate`；其余子命令已注册但返回 `NOT_IMPLEMENTED`（退出码 8），不会静默成功。
 
 ## 2. 统一退出码
 
@@ -37,7 +38,31 @@
 
 映射规则：`apperr.Error.Code` 显式携带退出码；未包装的错误一律映射为 `1`；退出码只由 `cmd/linux-cve` 一处 `os.Exit`，其他包只返回 error。
 
-## 3. 配置
+## 3. inventory 命令契约
+
+`linux-cve inventory [--json] [--save]`
+
+采集动作严格只读：只执行 `uname`、`dpkg-query` / `rpm -qa` / `apk list` / `pacman -Qi` 等查询命令，绝不刷新软件源或修改系统状态。
+
+| 参数 | 作用 |
+|------|------|
+| `--json` | 以 JSON 输出采集结果（`inventory` / `system` / `warnings` 三节） |
+| `--save` | 将采集结果在单事务内持久化到数据库（需先 `db migrate`） |
+
+退出码：
+
+| 场景 | 退出码 |
+|------|--------|
+| 采集成功 | 0 |
+| 未登记发行版 | 4（`UNSUPPORTED`，错误信息含已识别事实） |
+| 参数错误 | 2（`USAGE`） |
+| 采集/序列化/数据库错误 | 1（`ERROR`） |
+
+stdout 与 stderr 严格分离：正常结果与 JSON 走 stdout，错误信息走 stderr。采集失败绝不静默返回成功。
+
+> 说明：`--json` 当前使用 Go 结构体默认字段名（PascalCase）。对外稳定 JSON 协议将在阶段 3（`scan`）统一规范，届时 inventory 输出同步对齐。
+
+## 4. 配置
 
 加载顺序（后者覆盖前者）：内置默认值 → 配置文件 → 环境变量 → 命令行参数。
 
@@ -65,21 +90,32 @@ max_collateral_packages = 5
 
 `allow_auto_fix = false` 时 `fix` 必须显式 `--yes` 也不放行——配置层是硬开关，命令行不能绕过。
 
-## 4. 示例
+## 5. 示例
 
 ```
 $ linux-cve version
 linux-cve 2.0.0-dev (commit none, built unknown, go1.27.4, linux/amd64)
 
 $ linux-cve db migrate
-applied 1 migration(s); schema version = 1
+applied 2 migration(s); schema version = 2
 
 $ linux-cve db status
 database    : /var/lib/linux-cve/linux-cve.db
-schema      : 1
-migrations  : 0001_init (2026-11-18T02:41:20Z)
+schema      : 2
+migrations  : 0001_init (2026-11-18T02:41:20Z), 0002_inventory (2026-11-18T02:41:20Z)
 pending     : none
 feed sources: 0 registered
+
+$ linux-cve inventory
+distro       : debian
+release      : 12
+codename     : bookworm
+arch         : x86_64
+kernel       : 6.1.0-37-amd64
+kernel pkg   : linux-image-6.1.0-37-amd64 (6.1.140-1)
+packages     : 1284
+collected at : 2026-11-18T09:00:00Z
+hash         : 9f2c...
 
 $ linux-cve scan
 error: cli: scan 尚未实现（阶段 3）
