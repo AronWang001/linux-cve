@@ -16,11 +16,11 @@
 | Ubuntu | 24.04 noble | 🟡 | 🟡 | 🟡 待实机 | Ubuntu OVAL + USN | 首期目标 |
 | Amazon Linux | 2023 | 🟡 | 🟡 | 🟡 待实机 | AL2023 updateinfo | 首期目标 |
 | Amazon Linux | 2 | 🟡 Legacy | ⚠️ 未验证 | ❌ 不开放 | AL2 updateinfo（**未验证**） | EOL 2026-06-30，见 §2 |
-| RHEL | 8 / 9 | 🟡 | 🟡 | ❌ 后续 | Red Hat OVAL + Security API + CSAF-VEX | 检测与建议先行 |
+| RHEL | 8 / 9 | 🟡 | 🟡 | ❌ 后续 | Red Hat CSAF + VEX（主）+ OSV（交叉）+ OVAL v2（兼容） | 检测与建议先行；OVAL v2 已官方弃用 |
 | Rocky Linux | 8 / 9 | 🟡 | 🟡 | ❌ 后续 | 继承 RHEL + 自身 updateinfo | 不直接等同 RHEL |
 | AlmaLinux | 8 / 9 | 🟡 | 🟡 | ❌ 后续 | 继承 RHEL + 自身 updateinfo | 不直接等同 RHEL |
 | Oracle Linux | 8 / 9 | 🟡 | 🟡 | ❌ 后续 | Oracle OVAL + ELSA | UEK 与 RHCK 分开 |
-| SUSE / openSUSE | 15.x / Leap | 🟡 | 🟡 | ❌ 后续 | SUSE CSAF（唯一 A 级签名源） | 产品树映射复杂 |
+| SUSE / openSUSE | 15.x / Leap | 🟡 | 🟡 | ❌ 后续 | SUSE CSAF + CSAF VEX（A 级签名源） | 产品树映射复杂 |
 | Alpine | 3.19–3.21 | 🟡 | ⚠️ 部分 | ❌ 后续 | Alpine secdb | 未收录 ≠ 不受影响 |
 | Fedora | 现行 | 🟡 | 🟡 | ❌ 后续 | Bodhi + updateinfo | 生命周期短 |
 | Arch | 滚动 | 🟡 | ⚠️ 仅当前 | ❌ **不开放** | Arch 追踪器 | 见 §3 |

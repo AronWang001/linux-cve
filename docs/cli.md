@@ -66,8 +66,9 @@ JSON 输出使用独立 CLI DTO（`internal/app/inventory_dto.go`），不直接
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "collected_at": "2026-01-01T00:00:00Z",
+  "saved_inventory_id": 42,
   "distro": {
     "id": "debian",
     "os_id": "debian",
@@ -109,8 +110,27 @@ JSON 输出使用独立 CLI DTO（`internal/app/inventory_dto.go`），不直接
 - 空字符串显式输出 `""`（`source_name`、`vendor`、`kernel.package`、`kernel.evidence` 等），不省略字段。
 - 时间字段统一 UTC RFC3339；零值（未知）输出空串 `""`，不伪造时间。
 - `origin_channel` 无法证明时恒为 `"unknown"`，不得猜测。
+- `saved_inventory_id` 仅在 `--save` 且保存成功时出现（`omitempty`），不 `--save` 时字段缺省不出现。
 
-版本演进：`schema_version` 每次字段增删/改名/类型变更时递增；下游按版本号解析，旧字段移除前保留一个版本周期。
+### 3.1.1 架构规范
+
+- 字段 `distro.arch` / `packages[].arch` 输出**规范化架构名**：`amd64` / `arm64` / `i386` / `ppc64le` / `s390x` / `riscv64` / `all` / `noarch`。
+- 原始采集值（`uname -m` 的 `x86_64`、`aarch64` 等）经 `domain.CanonicalArch` 归一：`x86_64`→`amd64`、`aarch64`→`arm64`。
+- **原始架构 vs 规范化架构**：`inventory.Arch` 在领域模型里保留 `uname -m` 原值（用于审计与内核映射）；CLI JSON 只输出规范化名（用于下游匹配）。两者语义不同，不得混用。
+- 架构无关包：`all`（dpkg）与 `noarch`（rpm）统一归一到 `all` 输出。
+
+版本演进：`schema_version` 按以下规则递增，下游按版本号解析：
+
+| 变更类型 | 是否递增 |
+|----------|----------|
+| 新增**可选**字段（`omitempty`，不改变既有字段语义） | 可不递增（向后兼容） |
+| 新增**必填**字段 | 必须递增 |
+| 字段改名 | 必须递增 |
+| 删除字段 | 必须递增（旧字段保留一个版本周期后再删） |
+| 字段类型变更 | 必须递增 |
+
+> 本轮 `schema_version` 定为 2：`saved_inventory_id` 在 v1 首次冻结定版前新增，
+> 为避免「从未发布的 v1」造成歧义，直接以 2 作为首个对外稳定版本。后续新增可选字段可不递增。
 
 ## 4. 配置
 
@@ -160,7 +180,7 @@ $ linux-cve inventory
 distro       : debian
 release      : 12
 codename     : bookworm
-arch         : x86_64
+arch         : amd64
 kernel       : 6.1.0-37-amd64
 kernel pkg   : linux-image-6.1.0-37-amd64 (6.1.140-1)
 packages     : 1284
