@@ -2,6 +2,32 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.0.0] - 未发布（开发中，分支 `feat/v2.0.0`）
+
+v2.0 将只处理 CVE-2026-98432 的 Bash 工具重写为 Go 实现的多 CVE 检测与自动修复工具。当前进度为阶段 1（工程基础）：只建立了可构建、可测试、可迁移的骨架，尚未实现资产采集、情报接入、匹配、计划与执行。`scan`、`list`、`show`、`plan`、`fix`、`report`、`feed`、`support` 已注册但返回退出码 8。
+
+### 新增
+
+- Go 1.27.4 工程：`cmd/linux-cve` 入口、`internal/` 模块划分、`Makefile`、`go.mod`/`go.sum`。
+- CLI 分发与统一退出码（0/1/2/3/4/5/6/7/8/130），退出码只在一处调用 `os.Exit`。已实现 `version`、`help`、`db status`、`db migrate`。
+- 配置：TOML 文件 + `LINUX_CVE_*` 环境变量 + 命令行参数，优先级为默认值 < 文件 < 环境变量 < 命令行；`allow_auto_fix` 为硬开关。
+- 日志：基于 `log/slog`，支持 text/json，固定写 stderr，保证 stdout 只承载业务输出。
+- 数据库：SQLite（`modernc.org/sqlite` 1.62.0，纯 Go 无 cgo），WAL、外键、busy_timeout 连接参数，内嵌 SQL 迁移与校验和校验。
+- 领域模型：源码包/二进制包区分、三个独立状态维度（`VulnState`/`RemediationState`/`RuntimeState`）、证据结构、资产快照哈希、自动修复准入判定。
+- 文档：`docs/architecture.md`、`docs/data-model.md`、`docs/support-matrix.md`、`docs/cli.md`、`docs/phase1-report.md`。
+
+### 变更
+
+- 数据库唯一键：修复版本的唯一性锚定到「情报源 + 公告 + CVE + 发行版 + release + 渠道 + 包类型 + 包名 + 架构」，避免同包名跨发行版互相覆盖。
+- 状态语义：`PENDING_REBOOT`、`PENDING_RESTART` 不再与 `VULNERABLE`/`FIXED` 混在同一枚举，改为独立维度；服务待重启只以 `CONFIRMED`/`LIKELY`/`UNKNOWN` 表达证据强度。
+- 支持范围：Amazon Linux 2 标记为 `legacy`（EOL 2026-06-30），仅保留检测；Arch 因 `pacman -Sp` 无法提供可靠变更集，不开放自动修复。
+
+### 测试
+
+- 67 个 Go 单元测试，全部 PASS，0 SKIP；`go build ./...`、`go vet ./...`、`go test -race ./...` 均通过。
+- 覆盖：配置加载与覆盖优先级、退出码映射、迁移首次/重复执行、种子数据、唯一键跨发行版冲突、外键约束、校验和篡改检测、旧二进制打开新库、状态维度不变量、自动修复准入表、快照哈希顺序无关性、CLI 各分支退出码。
+- v1.3.2 的 Bash 实现与测试未改动，仍为当前发布版本。
+
 ## [1.3.2] - 2026-11-04
 
 修复两处输出问题：一键安装模式下「重启后复查」的提示指向一个并不存在的文件；判定阶段已待重启时，「修复结果」把此前安装的内核说成本轮安装。判定逻辑、基线数据、安装流程与退出码均未改动。
