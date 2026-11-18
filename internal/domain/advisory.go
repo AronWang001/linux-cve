@@ -142,8 +142,11 @@ func (f AdvisoryFix) Validate() error {
 	if f.AdvisoryUID == "" {
 		return domainErr("修复记录缺少公告 UID")
 	}
+	if f.SourceID == "" {
+		return domainErr("修复记录缺少情报源")
+	}
 	// UID 必须与 (source, advisory, cve) 三元组一致，防止归属错位。
-	if f.SourceID != "" && f.AdvisoryID != "" && f.CVEID.Valid() {
+	if f.AdvisoryID != "" && f.CVEID.Valid() {
 		if want := AdvisoryUID(f.SourceID, f.AdvisoryID, f.CVEID); f.AdvisoryUID != want {
 			return domainErr("修复记录 UID 与公告三元组不一致: 期望 %s，实际 %s", want, f.AdvisoryUID)
 		}
