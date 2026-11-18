@@ -11,16 +11,17 @@ import (
 // Inventory 是一次资产采集的完整快照。
 // Hash 用于执行前的一致性复核，防止用过期扫描结果去改机器。
 type Inventory struct {
-	DistroID      DistroID
-	Release       string
-	Codename      string
-	Arch          string
-	KernelRunning string
-	KernelPackage string // 运行内核对应的软件包名
-	KernelVersion string // 该包的版本
-	Packages      []InstalledPackage
-	CollectedAt   time.Time
-	Hash          string
+	DistroID       DistroID
+	Release        string
+	Codename       string
+	Arch           string
+	KernelRunning  string
+	KernelPackage  string // 运行内核对应的软件包名（仅精确证据映射，否则为空）
+	KernelVersion  string // 该包的版本
+	KernelEvidence string // 映射依据说明；KernelPackage 为空时也为空
+	Packages       []InstalledPackage
+	CollectedAt    time.Time
+	Hash           string
 }
 
 // Validate 校验快照完整性。
