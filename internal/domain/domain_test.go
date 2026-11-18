@@ -160,13 +160,41 @@ func TestArchMatches(t *testing.T) {
 		declared, installed string
 		want                bool
 	}{
+		// any 是唯一通配声明
 		{ArchAny, "amd64", true},
-		{"", "arm64", true},
+		{ArchAny, "arm64", true},
+		{ArchAny, "all", true},
+		{ArchAny, "noarch", true},
+		// 同一规范架构（含别名映射）
 		{"amd64", "amd64", true},
-		{"amd64", "arm64", false},
-		{"amd64", "all", true},
-		{"amd64", "noarch", true},
+		{"amd64", "x86_64", true},
+		{"x86_64", "amd64", true},
+		{"arm64", "aarch64", true},
+		{"aarch64", "arm64", true},
+		// 架构无关声明只匹配架构无关包
+		{"all", "all", true},
+		{"noarch", "noarch", true},
+		{"all", "noarch", true},
+		{"noarch", "all", true},
 		{"noarch", "amd64", false},
+		{"all", "arm64", false},
+		// 原生架构声明不匹配架构无关包，也不匹配其他架构
+		{"amd64", "all", false},
+		{"amd64", "noarch", false},
+		{"amd64", "arm64", false},
+		{"arm64", "amd64", false},
+		{"arm64", "all", false},
+		// 登记但不别名的原生架构：精确自匹配，不跨标识匹配
+		{"armhf", "armhf", true},
+		{"i386", "i686", false},
+		{"s390x", "s390x", true},
+		// 未登记架构禁止自动匹配，即使两侧同名
+		{"mips64", "mips64", false},
+		{"mips64", "amd64", false},
+		{"", "arm64", false},
+		{"amd64", "", false},
+		{"", "", false},
+		{"unknown-arch", "unknown-arch", false},
 	}
 	for _, c := range cases {
 		if got := ArchMatches(c.declared, c.installed); got != c.want {
@@ -175,10 +203,45 @@ func TestArchMatches(t *testing.T) {
 	}
 }
 
+func TestCanonicalArch(t *testing.T) {
+	cases := []struct {
+		in     string
+		want   string
+		wantOK bool
+	}{
+		{"AMD64", "amd64", true},
+		{" x86_64 ", "amd64", true},
+		{"noarch", ArchAll, true},
+		{"all", ArchAll, true},
+		{"any", ArchAny, true},
+		{"", "", false},
+		{"mystery", "", false},
+	}
+	for _, c := range cases {
+		got, ok := CanonicalArch(c.in)
+		if got != c.want || ok != c.wantOK {
+			t.Errorf("CanonicalArch(%q) = (%q,%v)，期望 (%q,%v)", c.in, got, ok, c.want, c.wantOK)
+		}
+	}
+	if !IsArchIndependent("noarch") || !IsArchIndependent("all") {
+		t.Error("all/noarch 应识别为架构无关")
+	}
+	if IsArchIndependent("amd64") || IsArchIndependent("any") {
+		t.Error("amd64/any 不是架构无关")
+	}
+}
+
 func TestInstalledPackageValidate(t *testing.T) {
 	p := InstalledPackage{
-		Ref:     PackageRef{Kind: PackageKindBinary, Name: "openssl", Arch: "amd64"},
-		Manager: ManagerDPKG,
+		Ref: PackageRef{
+			Kind:    PackageKindBinary,
+			Name:    "openssl",
+			Arch:    "amd64",
+			Version: Version{Raw: "3.0.11-1~deb12u2"},
+		},
+		Manager:        ManagerDPKG,
+		OriginChannel:  "bookworm-security",
+		OriginEvidence: "该版本仅出现在 bookworm-security 索引",
 	}
 	if err := p.Validate(); err != nil {
 		t.Errorf("合法安装包不应报错: %v", err)
@@ -187,6 +250,31 @@ func TestInstalledPackageValidate(t *testing.T) {
 	p.Ref.Kind = PackageKindSource
 	if err := p.Validate(); err == nil {
 		t.Error("安装包类型必须是 binary")
+	}
+	p.Ref.Kind = PackageKindBinary
+
+	p.Ref.Version = Version{}
+	if err := p.Validate(); err == nil {
+		t.Error("缺少版本应报错")
+	}
+	p.Ref.Version = Version{Raw: "3.0.11-1~deb12u2"}
+
+	p.OriginChannel = ""
+	if err := p.Validate(); err == nil {
+		t.Error("缺少来源渠道应报错")
+	}
+
+	// 声明具体渠道却无来源证明 = 猜测，必须拒绝
+	p.OriginChannel = "bookworm-security"
+	p.OriginEvidence = ""
+	if err := p.Validate(); err == nil {
+		t.Error("声明来源渠道但无证明应报错")
+	}
+
+	// 无法证明来源时用 ChannelUnknown，允许无证明
+	p.OriginChannel = ChannelUnknown
+	if err := p.Validate(); err != nil {
+		t.Errorf("ChannelUnknown 不应要求来源证明: %v", err)
 	}
 }
 
@@ -277,15 +365,17 @@ func TestAdvisoryFixValidate(t *testing.T) {
 
 	// 逐项删除必填字段，全部必须被拒绝：缺任何一项都无法可靠判定
 	cases := map[string]func(f *AdvisoryFix){
-		"缺公告UID":   func(f *AdvisoryFix) { f.AdvisoryUID = "" },
-		"缺CVE":     func(f *AdvisoryFix) { f.CVEID = "" },
-		"缺发行版":     func(f *AdvisoryFix) { f.DistroID = "" },
-		"缺release": func(f *AdvisoryFix) { f.Release = "" },
-		"缺渠道":      func(f *AdvisoryFix) { f.Channel = "" },
-		"缺包类型":     func(f *AdvisoryFix) { f.Ref.Kind = "" },
-		"缺包名":      func(f *AdvisoryFix) { f.Ref.Name = "" },
-		"缺架构":      func(f *AdvisoryFix) { f.Ref.Arch = "" },
-		"缺固定版本":    func(f *AdvisoryFix) { f.FixedVersion = "" },
+		"缺公告UID":     func(f *AdvisoryFix) { f.AdvisoryUID = "" },
+		"缺CVE":       func(f *AdvisoryFix) { f.CVEID = "" },
+		"缺发行版":       func(f *AdvisoryFix) { f.DistroID = "" },
+		"缺release":   func(f *AdvisoryFix) { f.Release = "" },
+		"缺渠道":        func(f *AdvisoryFix) { f.Channel = "" },
+		"缺包类型":       func(f *AdvisoryFix) { f.Ref.Kind = "" },
+		"缺包名":        func(f *AdvisoryFix) { f.Ref.Name = "" },
+		"缺架构":        func(f *AdvisoryFix) { f.Ref.Arch = "" },
+		"缺固定版本":      func(f *AdvisoryFix) { f.FixedVersion = "" },
+		"UID与三元组不一致": func(f *AdvisoryFix) { f.AdvisoryUID = "deadbeefdeadbeef" },
+		"公告号与UID不符":  func(f *AdvisoryFix) { f.AdvisoryID = "DSA-9999-1" },
 	}
 	for name, mutate := range cases {
 		bad := fix

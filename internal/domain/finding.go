@@ -153,23 +153,23 @@ func (r ReasonCode) Description() string {
 //	Remediation 修复可行性
 //	Runtime     补丁生效情况
 type Finding struct {
-	CVE          CVEID
-	Severity     Severity
-	Title        string
-	DistroID     DistroID
-	Release      string
-	Lifecycle    LifecycleState
-	Channel      string     // 本机该包的来源渠道
-	Package      PackageRef // 本机安装的二进制包
-	Installed    Version
-	FixedVersion *Version // 官方固定版本，未知为 nil
-	AdvisoryID   string
-	Vuln         VulnState
-	Remediation  RemediationState
-	Runtime      RuntimeState
-	Evidence     []Evidence
-	Reasons      []ReasonCode
-	DetectedAt   time.Time
+	CVE           CVEID
+	Severity      Severity
+	Title         string
+	DistroID      DistroID
+	Release       string
+	Lifecycle     LifecycleState
+	OriginChannel string     // 本机该包的可证明来源渠道；不可证明时为 ChannelUnknown
+	Package       PackageRef // 本机安装的二进制包
+	Installed     Version
+	FixedVersion  *Version // 官方固定版本，未知为 nil
+	AdvisoryID    string
+	Vuln          VulnState
+	Remediation   RemediationState
+	Runtime       RuntimeState
+	Evidence      []Evidence
+	Reasons       []ReasonCode
+	DetectedAt    time.Time
 }
 
 // Validate 校验 finding 的自洽性。
@@ -183,6 +183,9 @@ func (f Finding) Validate() error {
 	}
 	if f.Package.Name == "" || f.Package.Arch == "" {
 		return domainErr("finding 缺少包名或架构")
+	}
+	if f.OriginChannel == "" {
+		return domainErr("finding 缺少来源渠道（不可证明时应为 %q）", ChannelUnknown)
 	}
 	if !f.Vuln.Valid() {
 		return domainErr("finding 的漏洞状态非法: %q", f.Vuln)
