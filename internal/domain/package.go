@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -138,6 +140,25 @@ func (p InstalledPackage) Validate() error {
 		return domainErr("安装包 %q 声明来源渠道 %q 但缺少来源证明", p.Ref.Name, p.OriginChannel)
 	}
 	return nil
+}
+
+// ComputeEntryHash 计算该包记录的内容哈希，用于资产快照一致性比对。
+// 只纳入影响判定的字段（身份、版本、源包、渠道），不含厂商/安装时间等易变元数据。
+func (p InstalledPackage) ComputeEntryHash() string {
+	h := sha256.New()
+	for _, s := range []string{
+		string(p.Ref.Kind),
+		p.Ref.Name,
+		p.Ref.Arch,
+		p.Ref.Version.String(),
+		p.SourceName,
+		string(p.Manager),
+		p.OriginChannel,
+	} {
+		h.Write([]byte(s))
+		h.Write([]byte{'|'})
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // archIndependent 把各发行版的「架构无关」写法归一到 ArchAll。
