@@ -35,31 +35,63 @@ const (
     PackageKindBinary PackageKind = "binary"
 )
 
-// PackageRef 是包身份与版本的组合键，作为匹配与计划的唯一坐标。
+// Version 只做结构化存储；比较由阶段 2 的 internal/version 按
+// dpkg / rpm / apk / pacman 原生规则实现，禁止用字符串比较替代。
+type Version struct {
+    Raw      string // 原始字符串，逐字保留（String() 优先返回 Raw）
+    Epoch    int    // dpkg / rpm 的 epoch；apk / pacman 为 0
+    Upstream string // 上游版本部分
+    Release  string // 发行修订部分（dpkg 的 -1~deb12u1 中的 1~deb12u1）
+}
+
+// PackageRef 是包身份与版本组成的坐标，匹配与计划都以它为唯一键。
 type PackageRef struct {
     Kind    PackageKind
     Name    string
-    Arch    string   // "amd64"/"arm64"/"noarch"/"all"；"any" 表示公告未限定架构
-    Epoch   int      // dpkg/rpm 的 epoch；apk/pacman 为 0
-    Version string   // 上游版本
-    Release string   // 发行版修订号（dpkg 的 -1~deb12u1 的 1~deb12u1 部分；rpm 的 .el9 部分）
+    Arch    string   // 原生标识逐字保留：amd64/x86_64/arm64/aarch64/all/noarch/any…
+    Version Version  // 原始版本串无损保留，见 Version.Raw
 }
 ```
+
+架构匹配规则（`domain.ArchMatches`）：
+
+| 公告声明 | 匹配行为 |
+|----------|----------|
+| `any` | 唯一通配标识，适用一切已登记安装架构（含 `all`/`noarch`） |
+| `all` / `noarch` | 仅匹配架构无关的包（`all`/`noarch`） |
+| 已登记原生架构 | 仅匹配同一规范架构（`amd64≡x86_64`、`arm64≡aarch64`，其余自映射） |
+| 空串或未登记标识 | 一律不匹配，禁止未知架构自动匹配（即使两侧同名） |
+
+`PackageRef.Arch` 逐字保留原生标识；归一化映射只存在于匹配路径（`CanonicalArch`）。
 
 ### 2.2 本机安装包
 
 ```go
 type InstalledPackage struct {
-    Ref           PackageRef       // Kind = binary
-    SourceName    string           // 源码包名（dpkg Source / rpm SOURCERPM / apk origin / pacman pkgbase）
-    SourceVersion string           // 源码包版本（可得时）
-    Manager       PackageManager   // dpkg|rpm|apk|pacman
-    Channel       string           // 来源渠道：bookworm-security / noble-updates / amzn2023-core / main / core
-    Vendor        string           // 发行版或打包者
-    InstallTime   time.Time        // 零值表示未知
-    EntryHash     string           // 该包记录的内容哈希，用于资产快照比对
+    Ref            PackageRef       // Kind = binary
+    SourceName     string           // 源码包名（dpkg Source / rpm SOURCERPM / apk origin / pacman pkgbase）
+    SourceVersion  *Version         // 源码包版本（可得时）
+    Manager        PackageManager   // dpkg|rpm|apk|pacman
+    OriginChannel  string           // 可证明的已安装包来源渠道；不可证明时为 ChannelUnknown
+    OriginEvidence string           // 来源证明；OriginChannel != ChannelUnknown 时必填
+    Vendor         string           // 发行版或打包者
+    InstallTime    time.Time        // 零值表示未知
+    EntryHash      string           // 该包记录的内容哈希，用于资产快照比对
 }
 ```
+
+**来源渠道四分法**（`[修订 P1-3]`，禁止混用）：
+
+| # | 概念 | 承载位置 | 说明 |
+|---|------|----------|------|
+| 1 | 已安装包信息 | `InstalledPackage` 本身 | dpkg/rpm/apk/pacman 查询输出，纯事实 |
+| 2 | 当前启用的软件源 | 阶段 2 资产采集的仓库清单 | 本机 apt/dnf/apk 配置，不等于安装来源 |
+| 3 | 软件源提供的候选修复版本 | planner 查询本地仓库索引 | 只能回答「能不能修」，不能回答「从哪装的」 |
+| 4 | 可证明的已安装包来源 | `OriginChannel`（唯一允许写渠道结论的字段） | 有证据才允许写具体渠道 |
+
+`dpkg-query` 等采集输出通常**无法**证明安装来源。无法证明时必须写 `ChannelUnknown`，
+不得猜测；`OriginChannel != ChannelUnknown` 而缺少 `OriginEvidence` 的记录会被
+`Validate()` 拒绝。渠道不明不影响「是否受影响」判定，但修复计划必须另行核实候选仓库。
 
 `SourceName` 是源码包公告与二进制包之间的**唯一桥接字段**。它有三个合法状态：
 
@@ -92,6 +124,11 @@ type AdvisoryFix struct {
 ### 2.4 稳定性要求：Advisory UID
 
 `AdvisoryUID = sha256(source_id | advisory_id | cve_id)[:16]`，由内容派生、与插入顺序无关。同一公告重复导入幂等，不产生重复行。**不得**使用自增 ID 作为跨表引用，否则增量更新时无法对齐。
+
+`advisory_fixes` 表**不冗余** `advisory_uid`：只存 `(source_id, advisory_id, cve_id)`
+三元组并以组合外键锚定 `advisories`，从结构上消除 UID 与三元组不一致的可能
+（`[修订 P1-4]`）。领域层 `AdvisoryFix.AdvisoryUID` 为内存关联字段，
+`Validate()` 强制它与三元组推导值一致。
 
 ---
 
@@ -176,7 +213,14 @@ CREATE TABLE app_meta (
 );
 ```
 
-`app_meta` 固定键：`schema_version`、`feed_last_update`、`feed_snapshot_hash`、`db_created_at`、`db_engine_version`。
+**Schema 版本的唯一权威来源是 `schema_migrations`**（`[修订 P1-6]`）。
+`app_meta` 不再冗余 `schema_version`，固定键为：`feed_last_update`、
+`feed_snapshot_hash`、`db_created_at`、`db_engine_version`。
+一致性保障：
+
+- 迁移与 `schema_migrations` 记录写入在**同一事务**内提交；
+- 校验和不符 / 迁移序列缺档 / 库版本高于二进制 → 拒绝继续迁移（`ExitIntegrity`）；
+- 库 Schema 版本高于二进制内嵌最大值 → **拒绝 Open**（含只读命令），提示升级二进制。
 
 ### 4.2 发行版与生命周期 `[修订 6]`
 
@@ -214,8 +258,10 @@ CREATE TABLE feed_sources (
                      CHECK (signature_kind IN ('none','minisign','gpg','csaf','x509')),
     scope            TEXT NOT NULL DEFAULT 'advisory'
                      CHECK (scope IN ('advisory','metadata')),   -- C 级元数据源不得参与判定
-    validation_level TEXT NOT NULL DEFAULT 'unverified'
-                     CHECK (validation_level IN ('verified','structure-only','unverified')),
+    signature_status TEXT NOT NULL DEFAULT 'unverified'          -- 密码学签名验证结果
+                     CHECK (signature_status IN ('verified','failed','missing','not-applicable','unverified')),
+    integrity_status TEXT NOT NULL DEFAULT 'unchecked'           -- 内容哈希比对结果
+                     CHECK (integrity_status IN ('verified','failed','unchecked')),
     status           TEXT NOT NULL DEFAULT 'unknown'
                      CHECK (status IN ('ok','stale','error','unknown')),
     last_checked_at  TEXT,
@@ -226,10 +272,19 @@ CREATE TABLE feed_sources (
 );
 ```
 
-三个字段刻意分开，不允许合并成一个 `verified`：
+五个字段刻意分开（`[修订 P1-5]`），签名验证与内容完整性验证是两条独立通路：
 
-- `signature_kind='none'` + `validation_level='structure-only'` = B 级源正常运行状态（仅 TLS + 哈希）。
-- `trust_level='A'` 且验签失败 → `status='error'`，数据不得入库。
+| 字段 | 含义 | 不能表述为 |
+|------|------|------------|
+| `trust_level` | 「应然」信任分级（A/B/C） | 实际验证结果 |
+| `signature_kind` | 该源发布何种密码学签名 | 验签是否通过 |
+| `signature_status` | 本次数据的**密码学签名**验证结果 | — |
+| `integrity_status` | 本次数据的**内容哈希**比对结果 | 数字签名验证通过 |
+| `content_hash` | 实际下载字节的 SHA256 | 签名 |
+
+- `signature_kind='none'` + `signature_status='not-applicable'` + `integrity_status='verified'` = B 级源正常运行状态（仅 TLS + 哈希）。
+- `trust_level='A'` 且验签失败 → `signature_status='failed'`、`status='error'`，数据不得入库。
+- **禁止**把「下载源同站提供的 checksum 通过」表述为「数字签名验证通过」。
 - `scope='metadata'` 的源（NVD/CVE.org）只能写 `cves`，不得写 `advisory_fixes`。此约束由写入口 API 强制，不只靠约定。
 
 ### 4.4 公告与修复版本 `[修订 2]`
@@ -253,12 +308,11 @@ CREATE TABLE advisories (
 
 CREATE TABLE advisory_fixes (
     id                INTEGER PRIMARY KEY,
-    advisory_uid      TEXT NOT NULL REFERENCES advisories(uid) ON DELETE CASCADE,
     source_id         TEXT NOT NULL,
     advisory_id       TEXT NOT NULL,
     cve_id            TEXT NOT NULL,
-    distro_id         TEXT NOT NULL REFERENCES distros(id),
-    release           TEXT NOT NULL,                -- 必须与 distro_releases.release 一致
+    distro_id         TEXT NOT NULL,
+    release           TEXT NOT NULL,                -- 与 distro_releases.release 组合外键锚定
     channel           TEXT NOT NULL,                -- bookworm-security / noble-updates / amzn2023-core / main / core / extra
     package_kind      TEXT NOT NULL CHECK (package_kind IN ('source','binary')),
     package_name      TEXT NOT NULL,
@@ -272,7 +326,13 @@ CREATE TABLE advisory_fixes (
 
     -- [修订 2] 唯一性必须锚定「哪个发行版的哪个 release 的哪个渠道的哪个包身份」
     UNIQUE (source_id, advisory_id, cve_id, distro_id, release, channel,
-            package_kind, package_name, arch)
+            package_kind, package_name, arch),
+    -- [修订 P1-4] 公告归属：三元组必须指向真实公告行，级联删除
+    FOREIGN KEY (source_id, advisory_id, cve_id)
+        REFERENCES advisories (source_id, advisory_id, cve_id) ON DELETE CASCADE,
+    -- [修订 P1-4] 发行版+release 组合外键，禁止出现未登记的 release
+    FOREIGN KEY (distro_id, release)
+        REFERENCES distro_releases (distro_id, release)
 );
 
 CREATE INDEX idx_fixes_lookup
@@ -308,7 +368,9 @@ CREATE TABLE advisory_not_affected (
     arch         TEXT NOT NULL DEFAULT 'any',
     reason       TEXT NOT NULL,                    -- not-affected | not-in-release | vulnerable-code-absent | end-of-life
     evidence_url TEXT NOT NULL DEFAULT '',
-    UNIQUE (source_id, cve_id, distro_id, release, package_kind, package_name, arch)
+    UNIQUE (source_id, cve_id, distro_id, release, package_kind, package_name, arch),
+    FOREIGN KEY (distro_id, release)
+        REFERENCES distro_releases (distro_id, release)
 );
 ```
 
@@ -367,7 +429,9 @@ CREATE TABLE cve_references (
   6. 无任何数据 → UNKNOWN，Evidence 记 source_gap
 ```
 
-`archMatch(p, fix.arch)`：`fix.arch ∈ {"any", p.Arch, "noarch"}` 为真；`p.Arch == "noarch"` 时接受任意 `fix.arch`。
+`archMatch(p, fix.arch)` 即 `domain.ArchMatches(fix.arch, p.Arch)`，规则见 §2.1：
+`any` 为唯一通配；`all`/`noarch` 只互配；已登记原生架构按规范名互配（`amd64≡x86_64`、
+`arm64≡aarch64`）；空串或未登记标识一律不匹配，禁止未知架构自动匹配。
 
 ---
 
@@ -380,9 +444,10 @@ CREATE TABLE cve_references (
 | 0003_findings | scan_runs、findings、finding_evidence | 3 |
 | 0004_remediation | plans、plan_changes、remediation_runs、audit_log | 5 |
 
-规则：
+规则（`[修订 P1-6]`）：
 
-- 每个迁移是单文件、单事务、幂等（`IF NOT EXISTS` 之外不与已有数据冲突）。
-- 迁移不可回滚；出错时整个事务回滚，库保持上一版本。
-- 已应用迁移的 `checksum` 与文件不符 → 拒绝启动（`ExitIntegrity`）。
-- 库 `schema_version` 高于二进制内嵌最大值 → 拒绝启动，提示升级二进制。
+- `schema_migrations` 是 Schema 版本的**唯一权威来源**，`app_meta` 不冗余 `schema_version`。
+- 每个迁移是单文件、单事务：迁移 SQL 与 `schema_migrations` 记录写入同一事务，出错整体回滚。
+- 已应用迁移的 `checksum` 与文件不符 → 拒绝继续迁移（`ExitIntegrity`）。
+- 迁移序列缺档（低版本未应用却存在更高版本记录）→ 拒绝继续迁移。
+- 库 Schema 版本高于二进制内嵌最大值 → **拒绝 Open**（含只读命令），提示升级二进制。
