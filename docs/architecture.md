@@ -87,15 +87,15 @@
 
 | 级别 | 定义 | 校验手段 | 当前来源 | 报告措辞 |
 |------|------|----------|----------|----------|
-| A | 官方提供数据文件与分离/内嵌密码学签名 | 验签（minisign/GPG/CSAF `signatures`）+ 内容哈希 | SUSE CSAF（`.json.asc`） | `signature: verified` |
-| B | 官方 HTTPS 发布，无独立签名 | TLS 证书链 + SHA256 记录 + 单调时间戳 | Debian Tracker JSON、Ubuntu OVAL/USN、Red Hat OVAL/CSAF/Security API、Alpine secdb、Arch 追踪器、ALAS / updateinfo | `signature: not-available; integrity: tls+sha256` |
+| A | 官方提供数据文件与分离/内嵌密码学签名 | 验签（minisign/GPG/CSAF `signatures`）+ 内容哈希 | SUSE CSAF（`.json.asc`） | `signature_status: verified` |
+| B | 官方 HTTPS 发布，无独立签名 | TLS 证书链 + SHA256 记录 + 单调时间戳 | Debian Tracker JSON、Ubuntu OVAL/USN、Red Hat OVAL/CSAF/Security API、Alpine secdb、Arch 追踪器、ALAS / updateinfo | `signature_status: not-applicable; integrity_status: verified` |
 | C | 社区/聚合元数据 | 同上，且仅用于补充描述与评分 | NVD 2.0 API、cve.org API | `metadata-only` |
 
-实现约束：
+实现约束（`[修订 P1-5]`：签名验证与内容完整性验证是两条独立通路）：
 
-- 校验级别随每条 `advisory` 落库（`feed_sources.trust_level` + `signature_kind` + `signature_verified` 字段），报告逐条可查。
-- **禁止**把「下载源同站提供的 checksum 通过」表述为「数字签名验证通过」。此约束在 `internal/feed` 中以 API 形状强制：`VerifyResult{SignatureVerified bool, IntegrityVerified bool}` 两个独立布尔，不允许合并成 `Verified`。
-- A 级源验签失败时整批数据丢弃，并降级为 `UNKNOWN`，不得「继续使用上次缓存但不提示」——必须显式标记 `stale: true`。
+- 校验结果随每条 `advisory` 落库：`feed_sources.trust_level` + `signature_kind` + `signature_status` + `integrity_status` + `content_hash`，报告逐条可查。
+- `signature_status` 只记录**密码学签名**验证结果；`integrity_status` 只记录**内容哈希**比对结果。**禁止**把「下载源同站提供的 checksum 通过」表述为「数字签名验证通过」。此约束在 `internal/feed` 中以 API 形状强制：`VerifyResult{SignatureStatus, IntegrityStatus}` 两个独立字段，不允许合并成 `Verified`。
+- A 级源验签失败时整批数据丢弃（`signature_status='failed'`），并降级为 `UNKNOWN`，不得「继续使用上次缓存但不提示」——必须显式标记 `stale: true`。
 
 ---
 
@@ -369,7 +369,7 @@ adapters/                 发行版适配（Go 代码，不是 shell）
 
 - AL2 的修复版本查询在完成 updateinfo 验证前，`RemediationState` 最高只能到 `UNKNOWN`，且 AL2 本身已关闭自动修复，双重约束。
 - 任何来源「未收录某 CVE」只能推出 `UNKNOWN`，**不得**推出 `NOT_AFFECTED`。`NOT_AFFECTED` 必须来自官方显式声明。
-- 每条 finding 的 `Evidence[].source_validation` 字段记录该来源当前的验证等级（`verified` / `structure-only` / `unverified`），报告中原样呈现。
+- 每条 finding 的 `Evidence[]` 携带 `SignatureStatus`（verified/failed/missing/not-applicable/unverified）与 `IntegrityStatus`（verified/failed/unchecked）两个独立字段，分别记录该来源的密码学签名验证结果与内容哈希比对结果，报告中原样呈现，禁止合并。
 
 ---
 

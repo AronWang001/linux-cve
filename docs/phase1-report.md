@@ -18,7 +18,7 @@
 | 领域模型 | `internal/domain`（distro、package、version、cve、advisory、finding、inventory） |
 | 文档 | `docs/architecture.md`、`docs/data-model.md`、`docs/support-matrix.md`、`docs/cli.md` |
 
-规模：源码 2,271 行，测试 1,606 行，SQL 197 行，文档 949 行。
+规模（阶段 1.1 复核后实测 `wc -l`）：源码 2,475 行，测试 2,043 行，SQL 209 行，设计文档（architecture/data-model/support-matrix/cli）1,013 行。
 
 ## 2. 八项修订的落实位置
 
@@ -30,8 +30,8 @@
 | 4 | 重设 PENDING_RESTART 判定 | `architecture.md` §6（四类误判 + 四级证据链） | 模型层 `ServiceRestart.Confidence`；采集实现留待阶段 5，`TestFindingValidateRejectsInvalid` 校验可信度枚举 |
 | 5 | pacman 预演不可靠 → Arch 不开放自动修复 | `architecture.md` §7.1、`support-matrix.md` §3 | 能力矩阵留待 `package_manager`（阶段 5）实现 `SupportsAutoFix()`；本阶段在文档中定案 |
 | 6 | AL2 EOL 2026-06-30 → Legacy，不纳入首期自动修复 | `support-matrix.md` §2、`architecture.md` §9 | 种子数据 `amzn:2` = `legacy` / `2026-06-30`；`TestSeedData` 断言；`Release.SupportsAutoFix()` 拒绝 legacy |
-| 7 | AL2 updateinfo 验证状态不得夸大 | `architecture.md` §10（逐源标注） | 文档标记 `unverified`；`feed_sources.validation_level` 枚举预留 `unverified` |
-| 8 | 架构图区分签名与 TLS/哈希，增加资产采集输入 | `architecture.md` §2 图 + §3 分级表 | `feed_sources` 表把 `signature_kind` / `content_hash` / `validation_level` 拆成三列，禁止合并为单一 `verified` |
+| 7 | AL2 updateinfo 验证状态不得夸大 | `architecture.md` §10（逐源标注） | 文档标记 `unverified`；`feed_sources` 以 `signature_status`/`integrity_status` 记录实然验证结果（阶段 1.1 起替代 `validation_level`，见勘误） |
+| 8 | 架构图区分签名与 TLS/哈希，增加资产采集输入 | `architecture.md` §2 图 + §3 分级表 | `feed_sources` 表拆分 `signature_kind` / `signature_status` / `integrity_status` / `content_hash` 四列，签名验证与哈希校验独立（阶段 1.1 修订） |
 
 ## 3. 构建结果
 
@@ -52,26 +52,32 @@ $ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ...
 
 ## 4. 测试结果
 
-命令与真实结果：
+命令与真实结果（阶段 1.1 复核，本分支当前 HEAD）：
 
 ```
 $ go test ./...
-ok  internal/app        0.174s
+ok  internal/app        0.120s
 ok  internal/apperr     (cached)
+ok  internal/buildinfo  0.033s
 ok  internal/config     (cached)
-ok  internal/database   (cached)
-ok  internal/domain     (cached)
+ok  internal/database   0.406s
+ok  internal/domain     0.028s
 ok  internal/exitcode   (cached)
 ok  internal/logging    (cached)
 ?   cmd/linux-cve       [no test files]
-?   internal/buildinfo  [no test files]
 
-$ go test ./... -v | grep -c "^=== RUN"     → 67
-$ go test ./... -v | grep -c "FAIL|SKIP"    → 0
-$ CGO_ENABLED=1 go test -race ./...         → 全部 ok（8 包 1.1–1.9s）
+$ go test ./... -v | grep -c "^=== RUN"                → 79
+$ go test ./... -v | grep -E "^\s*--- (PASS|FAIL|SKIP)" | awk '{print $2}' | sort | uniq -c
+     79 PASS:
+$ go test ./... -v | grep -E "^\s*--- (FAIL|SKIP)"     → （无输出，0 条）
+$ CGO_ENABLED=1 go test -race ./...                    → 全部 ok（9 包）
 ```
 
-分布：app 10、apperr 3、config 10、database 12、domain 26、exitcode 2、logging 4。
+**勘误（阶段 1.1）**：本报告初版第 70 行使用 `grep -c "FAIL|SKIP"`（未加 `-E`）
+统计失败数。不加 `-E` 时 `|` 按字面匹配，结果恒为 0，**不能**作为零失败的证据。
+上列命令已改为扩展正则并附原始过滤输出，零失败结论以新证据为准。
+
+分布（1.1 复核后）：app 10、apperr 3、buildinfo 2、config 10、database 18、domain 30、exitcode 2、logging 4，合计 79。
 
 关键用例：
 
@@ -110,7 +116,7 @@ EXIT=0
 
 ```
 $ ./linux-cve version
-linux-cve 2.0.0-dev (commit ec1415b, built unknown, go1.27.4, windows/amd64)
+linux-cve 2.0.0-dev (commit ddad10d, built 2026-11-18T05:16:50Z, go1.27.4, windows/amd64)
 
 $ ./linux-cve db migrate
 applied 1 migration(s); schema version = 1
@@ -134,11 +140,21 @@ error: cli: 未知子命令: frobnicate（运行 linux-cve help 查看用法）
 2
 ```
 
+**勘误（阶段 1.1）**：初版此处记录 `commit ec1415b`（main 基线提交）。
+`ec1415b` 不是当前开发分支提交，属于构建信息注入错误/陈旧二进制输出，不得冒充当前构建。
+已修复：`buildinfo.Commit` 未注入时显示 `unknown`（不再是任何提交号），
+Makefile 以构建时 `git rev-parse --short HEAD` 注入。上列输出为修复后重新构建实测，
+commit 与当前分支 HEAD 一致。未注入 ldflags 时的实测输出为：
+
+```
+linux-cve 2.0.0-dev (commit unknown, built unknown, go1.27.4, windows/amd64)
+```
+
 ## 6. 未解决问题与限制
 
 1. **无 Linux 实机**：全部验证在 Windows/amd64 完成。Linux 二进制仅交叉编译，未运行；`/var/lib/linux-cve` 目录权限（0750）、`/etc/linux-cve/config.toml` 归属、非 root 运行的权限错误路径均未在真实 Linux 上验证。→ 阶段 2 前需要 VM 清单（Debian 12/13、Ubuntu 22.04/24.04、AL2023）。
 2. **Windows 上验证了 WAL 与并发**，未验证 Linux 文件系统挂载选项（如 NFS/overlay 上的 WAL 行为）。
-3. **`app_meta.schema_version` 与 `schema_migrations` 双记录**：当前两者由迁移种子与迁移记录分别写入，尚无一致性校验代码。阶段 3 加入数据更新时需要补校验或用单一来源。
+3. ~~**`app_meta.schema_version` 与 `schema_migrations` 双记录**~~ **已解决（阶段 1.1）**：`schema_migrations` 为唯一权威来源，`app_meta` 不再冗余 `schema_version`；校验和/缺档/超版本三类不一致均拒绝继续迁移，库版本高于二进制拒绝 Open。见 `docs/phase1.1-review.md`。
 4. **依赖供应链**：模块经 `goproxy.cn` 拉取，校验使用 `sum.golang.google.cn`。CI 落地时需固定 `GOPROXY`/`GOSUMDB` 或改用 vendor，避免不同网络环境解析到不同代理。
 5. **`go.sum` 依赖 9 个间接模块**（`modernc.org/libc`、`mathutil`、`memory` 等），后续需在阶段 7 做依赖安全审计。
 6. **未实现的表**：`inventories`、`findings`、`plans`、`audit_log` 按阶段 2/3/5 的迁移追加，当前 Schema 只到情报层。
