@@ -46,7 +46,7 @@
 
 | 参数 | 作用 |
 |------|------|
-| `--json` | 以 JSON 输出采集结果（`inventory` / `system` / `warnings` 三节） |
+| `--json` | 以 JSON 输出采集结果（snake_case 字段，见下方契约） |
 | `--save` | 将采集结果在单事务内持久化到数据库（需先 `db migrate`） |
 
 退出码：
@@ -60,7 +60,57 @@
 
 stdout 与 stderr 严格分离：正常结果与 JSON 走 stdout，错误信息走 stderr。采集失败绝不静默返回成功。
 
-> 说明：`--json` 当前使用 Go 结构体默认字段名（PascalCase）。对外稳定 JSON 协议将在阶段 3（`scan`）统一规范，届时 inventory 输出同步对齐。
+### 3.1 `--json` 输出契约
+
+JSON 输出使用独立 CLI DTO（`internal/app/inventory_dto.go`），不直接暴露 domain 模型的 Go 默认序列化。字段统一 snake_case，顺序稳定（struct 声明顺序），可演进性由 `schema_version` 保证。
+
+```json
+{
+  "schema_version": 1,
+  "collected_at": "2026-01-01T00:00:00Z",
+  "distro": {
+    "id": "debian",
+    "os_id": "debian",
+    "name": "Debian GNU/Linux 12",
+    "release": "12",
+    "codename": "bookworm",
+    "arch": "amd64",
+    "manager": "dpkg"
+  },
+  "kernel": {
+    "running": "6.1.0-37-amd64",
+    "package": "linux-image-6.1.0-37-amd64",
+    "version": "6.1.140-1",
+    "evidence": "dpkg package linux-image-6.1.0-37-amd64 matches uname -r"
+  },
+  "packages": [
+    {
+      "kind": "binary",
+      "name": "bash",
+      "arch": "amd64",
+      "version": "5.2.15-2+b7",
+      "source_name": "bash",
+      "source_version": "5.2.15-2",
+      "manager": "dpkg",
+      "origin_channel": "unknown",
+      "vendor": "GNU",
+      "install_time": "2026-01-01T00:00:00Z",
+      "entry_hash": "..."
+    }
+  ],
+  "hash": "...",
+  "warnings": []
+}
+```
+
+空值语义约定：
+
+- 空数组统一输出 `[]`，不使用 `null`（`packages`、`warnings` 等）。
+- 空字符串显式输出 `""`（`source_name`、`vendor`、`kernel.package`、`kernel.evidence` 等），不省略字段。
+- 时间字段统一 UTC RFC3339；零值（未知）输出空串 `""`，不伪造时间。
+- `origin_channel` 无法证明时恒为 `"unknown"`，不得猜测。
+
+版本演进：`schema_version` 每次字段增删/改名/类型变更时递增；下游按版本号解析，旧字段移除前保留一个版本周期。
 
 ## 4. 配置
 
