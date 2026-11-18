@@ -366,6 +366,7 @@ func TestAdvisoryFixValidate(t *testing.T) {
 	// 逐项删除必填字段，全部必须被拒绝：缺任何一项都无法可靠判定
 	cases := map[string]func(f *AdvisoryFix){
 		"缺公告UID":     func(f *AdvisoryFix) { f.AdvisoryUID = "" },
+		"缺情报源":       func(f *AdvisoryFix) { f.SourceID = "" },
 		"缺CVE":       func(f *AdvisoryFix) { f.CVEID = "" },
 		"缺发行版":       func(f *AdvisoryFix) { f.DistroID = "" },
 		"缺release":   func(f *AdvisoryFix) { f.Release = "" },
