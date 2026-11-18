@@ -10,13 +10,13 @@ func fixedV(s string) *Version { return &Version{Raw: s} }
 // baseFinding 是一条「Debian 12 + 有修复包 + 活跃支持期」的合法 finding。
 func baseFinding() Finding {
 	return Finding{
-		CVE:       CVEID("CVE-2026-98432"),
-		Severity:  SeverityHigh,
-		Title:     "内核权限提升",
-		DistroID:  DistroDebian,
-		Release:   "12",
-		Lifecycle: LifecycleActive,
-		Channel:   "bookworm-security",
+		CVE:           CVEID("CVE-2026-98432"),
+		Severity:      SeverityHigh,
+		Title:         "内核权限提升",
+		DistroID:      DistroDebian,
+		Release:       "12",
+		Lifecycle:     LifecycleActive,
+		OriginChannel: "bookworm-security",
 		Package: PackageRef{
 			Kind:    PackageKindBinary,
 			Name:    "linux-image-6.1.0-31-amd64",
@@ -30,11 +30,12 @@ func baseFinding() Finding {
 		Remediation:  RemediationFixAvailable,
 		Runtime:      RuntimeState{Reboot: RebootNotRequired},
 		Evidence: []Evidence{{
-			SourceID:        SourceDebianTracker,
-			ValidationLevel: ValidationVerified,
-			AdvisoryID:      "DSA-5810-1",
-			MatchKind:       MatchFixedVersion,
-			Detail:          "6.1.140-1 < 6.1.145-1",
+			SourceID:   SourceDebianTracker,
+			Signature:  SignatureNotApplicable, // B 级源无密码学签名
+			Integrity:  IntegrityVerified,
+			AdvisoryID: "DSA-5810-1",
+			MatchKind:  MatchFixedVersion,
+			Detail:     "6.1.140-1 < 6.1.145-1",
 		}},
 	}
 }

@@ -44,19 +44,42 @@ func (t TrustLevel) Valid() bool {
 	return t == TrustLevelA || t == TrustLevelB || t == TrustLevelC
 }
 
-// SourceValidation 是该情报源当前实际达到的验证程度。
-// 与 TrustLevel 分开：等级是「应然」，验证程度是「实然」。
-type SourceValidation string
+// SignatureStatus 是密码学签名的验证结果。
+// 与 IntegrityStatus 独立记录，禁止互相替代：
+// 哈希通过只说明字节未变，不提供来源真实性；签名通过才是身份保证。
+type SignatureStatus string
 
 const (
-	ValidationVerified      SourceValidation = "verified"       // 已完成真实解析/验签验证
-	ValidationStructureOnly SourceValidation = "structure-only" // 仅确认结构与可达性
-	ValidationUnverified    SourceValidation = "unverified"     // 尚未验证
+	SignatureVerified      SignatureStatus = "verified"       // 密码学签名验证通过
+	SignatureFailed        SignatureStatus = "failed"         // 存在签名但验证失败
+	SignatureMissing       SignatureStatus = "missing"        // 期望签名但缺失
+	SignatureNotApplicable SignatureStatus = "not-applicable" // 该源不发布密码学签名（B/C 级）
+	SignatureUnverified    SignatureStatus = "unverified"     // 尚未验证
 )
 
-// Valid 判断验证程度取值是否合法。
-func (v SourceValidation) Valid() bool {
-	return v == ValidationVerified || v == ValidationStructureOnly || v == ValidationUnverified
+// Valid 判断签名状态取值是否合法。
+func (s SignatureStatus) Valid() bool {
+	switch s {
+	case SignatureVerified, SignatureFailed, SignatureMissing,
+		SignatureNotApplicable, SignatureUnverified:
+		return true
+	}
+	return false
+}
+
+// IntegrityStatus 是内容哈希的比对结果，只保证「下载字节与记录一致」。
+// 即使 verified 也不得表述为「数字签名验证通过」。
+type IntegrityStatus string
+
+const (
+	IntegrityVerified  IntegrityStatus = "verified"  // 内容哈希与发布记录一致
+	IntegrityFailed    IntegrityStatus = "failed"    // 哈希不一致
+	IntegrityUnchecked IntegrityStatus = "unchecked" // 尚未比对
+)
+
+// Valid 判断完整性状态取值是否合法。
+func (s IntegrityStatus) Valid() bool {
+	return s == IntegrityVerified || s == IntegrityFailed || s == IntegrityUnchecked
 }
 
 // Advisory 是一条官方安全公告与某个 CVE 的关联记录。
@@ -118,6 +141,12 @@ type AdvisoryFix struct {
 func (f AdvisoryFix) Validate() error {
 	if f.AdvisoryUID == "" {
 		return domainErr("修复记录缺少公告 UID")
+	}
+	// UID 必须与 (source, advisory, cve) 三元组一致，防止归属错位。
+	if f.SourceID != "" && f.AdvisoryID != "" && f.CVEID.Valid() {
+		if want := AdvisoryUID(f.SourceID, f.AdvisoryID, f.CVEID); f.AdvisoryUID != want {
+			return domainErr("修复记录 UID 与公告三元组不一致: 期望 %s，实际 %s", want, f.AdvisoryUID)
+		}
 	}
 	if !f.CVEID.Valid() {
 		return domainErr("修复记录缺少合法 CVE")
@@ -211,12 +240,14 @@ const (
 )
 
 // Evidence 是判定依据，必须随每条 finding 落库并出现在报告中。
+// Signature 与 Integrity 分列两字段：两者结论独立呈现，禁止合并为单一 verified。
 type Evidence struct {
-	SourceID        SourceID
-	ValidationLevel SourceValidation
-	AdvisoryID      string
-	URL             string
-	MatchKind       MatchKind
-	Detail          string // 人类可读说明，报告原样输出
-	RetrievedAt     time.Time
+	SourceID    SourceID
+	Signature   SignatureStatus
+	Integrity   IntegrityStatus
+	AdvisoryID  string
+	URL         string
+	MatchKind   MatchKind
+	Detail      string // 人类可读说明，报告原样输出
+	RetrievedAt time.Time
 }

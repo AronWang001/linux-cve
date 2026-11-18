@@ -15,7 +15,9 @@ func mkPkg(name, version, source string) InstalledPackage {
 		},
 		SourceName: source,
 		Manager:    ManagerDPKG,
-		Channel:    "bookworm-security",
+		// 测试默认给可证明来源；不可证明的场景用 ChannelUnknown
+		OriginChannel:  "bookworm-security",
+		OriginEvidence: "测试夹具：版本唯一出现在 bookworm-security 索引",
 	}
 }
 

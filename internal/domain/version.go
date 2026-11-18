@@ -7,6 +7,12 @@ import "fmt"
 // 只做结构化存储，不实现比较规则：
 // 比较必须使用目标发行版的原生规则（dpkg / rpm / apk / pacman），
 // 由 internal/version 在阶段 2 实现，避免用 SemVer 误判 Linux 包版本。
+//
+// 原始值无损保留是硬约束：Raw 逐字保存上游字符串，String() 优先返回 Raw，
+// 解析器升级或拆分逻辑变更都不影响报告与审计的可回溯性。
+// dpkg 的 epoch/tilde 回移（6.12.113-1~deb12u1）、rpm 的 EVR、
+// apk 的 -rN 修订、pacman 的 pkgrel 一律以 Raw 为准，
+// 禁止用 Go 字符串比较（<、>）替代包管理器版本比较。
 type Version struct {
 	Raw      string // 原始字符串，逐字保留，用于报告与审计
 	Epoch    int    // dpkg / rpm 的 epoch，apk / pacman 为 0

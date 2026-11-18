@@ -61,7 +61,7 @@ func (inv Inventory) ComputeHash() string {
 			p.Ref.Arch,
 			p.Ref.Version.String(),
 			p.SourceName,
-			p.Channel,
+			p.OriginChannel,
 		}, "|"))
 	}
 	sort.Strings(lines)
