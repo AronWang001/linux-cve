@@ -87,9 +87,13 @@
 
 | 级别 | 定义 | 校验手段 | 当前来源 | 报告措辞 |
 |------|------|----------|----------|----------|
-| A | 官方提供数据文件与分离/内嵌密码学签名 | 验签（minisign/GPG/CSAF `signatures`）+ 内容哈希 | SUSE CSAF（`.json.asc`） | `signature_status: verified` |
-| B | 官方 HTTPS 发布，无独立签名 | TLS 证书链 + SHA256 记录 + 单调时间戳 | Debian Tracker JSON、Ubuntu OVAL/USN、Red Hat OVAL/CSAF/Security API、Alpine secdb、Arch 追踪器、ALAS / updateinfo | `signature_status: not-applicable; integrity_status: verified` |
+| A | 官方提供数据文件与分离/内嵌密码学签名 | 验签（GPG `.asc`）+ 内容哈希 + 信任锚 | SUSE CSAF/VEX（`.json.asc`）、Red Hat CSAF/VEX（`.json.asc` + `provider-metadata.json`） | `signature_status: verified` |
+| B | 官方 HTTPS 发布，无独立签名 | TLS 证书链 + SHA256 记录 + 单调时间戳 | Debian Tracker JSON、Ubuntu OVAL/USN、Alpine secdb、Arch 追踪器、ALAS / updateinfo | `signature_status: not-applicable; integrity_status: verified` |
 | C | 社区/聚合元数据 | 同上，且仅用于补充描述与评分 | NVD 2.0 API、cve.org API | `metadata-only` |
+
+> 阶段 3.0.1 修正：初版把 Red Hat 列为 B 级（无签名）是错误。实测 Red Hat CSAF/VEX 每文件配
+> `.asc` + `.sha256`，`provider-metadata.json` 声明 PGP 公钥指纹 `77E79ABE93673533ED09EBE2DCE3823597F5EAC4`
+> 与 `role=csaf_trusted_provider`。签名源为 SUSE + Red Hat 两个 A 级源。
 
 实现约束（`[修订 P1-5]`：签名验证与内容完整性验证是两条独立通路）：
 
@@ -338,6 +342,19 @@ adapters/                 发行版适配（Go 代码，不是 shell）
 - Arch `pacman`：`alpm_pkg_vercmp`（旧 rpm 语义怪癖，如 release 仅两侧都存在才比较）。
 
 硬约束：禁止用 Go 字符串比较替代；显式指定管理器，跨管理器禁止直接比较；非法版本明确报错；原始版本串无损保留。
+
+### 8.3 情报采集模块（feed）`[阶段 3]`
+
+`internal/feed` 负责下载、验证、归一化官方漏洞情报，采用「不可变 Artifact + 归一化数据」分层：
+
+- **Feed Source**：静态配置（端点/信任级别/签名公钥指纹），阶段 1 `feed_sources` 表已建模。
+- **Feed Artifact**：按内容 SHA256 寻址的不可变原始文件，跨公告共享（Debian 90MB JSON 被 4k+ 包共享一次）；签名验证（A 级源 GPG `.asc`）+ 内容哈希（`.sha256`）分离记录。
+- **Feed Snapshot**：一次成功同步的归一化结果集，active 指针仅在单事务提交时翻转。
+- **Advisory / Fix / NotAffected**：归一化记录，每条携带 `artifact_sha256` + `raw_locator` + `raw_record_hash` 追溯原始证据，不内嵌全文。
+- **原子更新**：两段式提交（先落不可变 Artifact，后 SQLite 单事务写归一化 + 翻转 active 指针），任一步失败不破坏上一份有效情报；并发锁 + 崩溃恢复 + 延迟 GC。
+- **解析安全**：统一护栏（超时/体积/解压比/嵌套深度/XXE 禁用/记录长度/异常隔离）。
+
+信任分级与签名源见 §3；数据源端点与许可见 `docs/feed-source-research.md`。
 
 ---
 

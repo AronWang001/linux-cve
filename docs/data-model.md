@@ -1,7 +1,7 @@
 # v2.0 数据模型与数据库 Schema
 
 - 版本：2.0.0-draft.2
-- 对应迁移：`0001_init.sql`（阶段 1）、`0002_inventory.sql`（阶段 2）、`0003_findings.sql`（阶段 3）
+- 对应迁移：`0001_init.sql`（阶段 1）、`0002_inventory.sql`（阶段 2）、`0003_feed.sql`（阶段 3）
 
 ---
 
@@ -10,7 +10,9 @@
 ```
 distros 1──n distro_releases
                 │
-feed_sources 1──n advisories 1──n advisory_fixes
+feed_sources 1──n feed_snapshots 1──n feed_artifacts
+                       │
+                       └──▶ advisories 1──n advisory_fixes
                        │              │  (distro_id, release, channel, package_kind, name, arch)
                        │              ▼
                        └──────▶ cves ──────▶ findings ◀──── inventory_packages
@@ -20,6 +22,9 @@ feed_sources 1──n advisories 1──n advisory_fixes
 ```
 
 `findings` 不持久化到情报库之外的事业表，而是「一次扫描 = 一个 inventory + 一组 findings」写入 `scan_runs` / `findings`，便于报告与复检对比（阶段 3 落地）。
+
+`feed_artifacts`（不可变原始文件）与 `feed_snapshots`（归一化结果集）是阶段 3 新增的存储分层，
+`advisories` 等归一化表通过 `artifact_sha256` 引用原始证据，不内嵌全文。
 
 ---
 
@@ -287,6 +292,50 @@ CREATE TABLE feed_sources (
 - **禁止**把「下载源同站提供的 checksum 通过」表述为「数字签名验证通过」。
 - `scope='metadata'` 的源（NVD/CVE.org）只能写 `cves`，不得写 `advisory_fixes`。此约束由写入口 API 强制，不只靠约定。
 
+### 4.3.1 Feed 存储分层 `[阶段 3]`
+
+原始情报按内容哈希保存为不可变 Artifact，不按 CVE 重复保存完整文件；归一化记录通过
+`artifact_sha256` 引用原始证据。
+
+```sql
+-- 不可变原始文件（内容寻址，跨公告共享）
+CREATE TABLE feed_artifacts (
+    sha256           TEXT PRIMARY KEY,          -- 内容哈希 = 主键
+    source_id        TEXT NOT NULL REFERENCES feed_sources(id),
+    size_bytes       INTEGER NOT NULL,
+    download_url     TEXT NOT NULL,
+    fetched_at       TEXT NOT NULL,
+    signature_status TEXT NOT NULL DEFAULT 'not-applicable'
+                     CHECK (signature_status IN ('verified','failed','missing','not-applicable','unverified')),
+    integrity_status TEXT NOT NULL DEFAULT 'unchecked'
+                     CHECK (integrity_status IN ('verified','failed','unchecked')),
+    stored_path      TEXT NOT NULL              -- 本地文件路径（文件名=sha256）
+);
+
+-- 一次成功同步的归一化结果集（active 指针）
+CREATE TABLE feed_snapshots (
+    id             TEXT PRIMARY KEY,            -- 内容派生
+    source_id      TEXT NOT NULL REFERENCES feed_sources(id),
+    started_at     TEXT NOT NULL,
+    completed_at   TEXT,
+    is_active      INTEGER NOT NULL DEFAULT 0,  -- 1=当前有效；仅事务提交时翻转
+    content_hash   TEXT NOT NULL,               -- 快照内容哈希，用于重复更新判等
+    parser_version TEXT NOT NULL DEFAULT ''
+);
+CREATE UNIQUE INDEX idx_snapshot_active ON feed_snapshots (source_id) WHERE is_active = 1;
+
+-- 快照 ↔ artifact 多对多
+CREATE TABLE feed_snapshot_artifacts (
+    snapshot_id  TEXT NOT NULL REFERENCES feed_snapshots(id) ON DELETE CASCADE,
+    artifact_sha TEXT NOT NULL REFERENCES feed_artifacts(sha256),
+    PRIMARY KEY (snapshot_id, artifact_sha)
+);
+```
+
+不可变与归一化的关系：Artifact 是不可变原始字节，一旦落盘永不改写（撤回/删除的公告不删 Artifact，
+只在归一化层标记）；Advisory/Fix/NotAffected 可随解析器版本演进重建，每条携带 `artifact_sha256` +
+`raw_locator` + `raw_record_hash` 追溯原始证据。
+
 ### 4.4 公告与修复版本 `[修订 2]`
 
 ```sql
@@ -303,8 +352,17 @@ CREATE TABLE advisories (
     updated_at     TEXT,
     url            TEXT NOT NULL DEFAULT '',
     fetched_at     TEXT NOT NULL,
+    -- [阶段 3] 原始证据溯源：不内嵌全文，指向不可变 Artifact + 原始记录定位
+    artifact_sha256  TEXT NOT NULL DEFAULT '',      -- 指向 feed_artifacts.sha256
+    raw_locator      TEXT NOT NULL DEFAULT '',      -- 原始记录定位（JSON 路径 / OVAL id / CSAF id）
+    raw_record_hash  TEXT NOT NULL DEFAULT '',      -- sha256(原始记录字节)
+    parser_version   TEXT NOT NULL DEFAULT '',      -- 解析器版本
     UNIQUE (source_id, advisory_id, cve_id)
 );
+```
+
+> 注：`advisories` 本体是「源 + 公告号 + CVE」三元组，**不含发行版维度**；发行版/release/渠道/包维度
+> 在 `advisory_fixes` / `advisory_not_affected` 中表达（见下）。这是阶段 1 已冻结的契约，阶段 3 不改变。
 
 CREATE TABLE advisory_fixes (
     id                INTEGER PRIMARY KEY,
