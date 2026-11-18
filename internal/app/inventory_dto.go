@@ -9,8 +9,10 @@ import (
 
 // inventorySchemaVersion 是 inventory --json 输出的结构版本号。
 // 与数据库 schema 版本解耦：JSON 协议可独立演进。
-// 每次改动字段语义（增删、改名、类型变化）时必须递增，保持向后可演进。
-const inventorySchemaVersion = 1
+// 变更规则（见 docs/cli.md §3.1）：
+//   - 新增可选字段：向后兼容，可不递增（但本轮 saved_inventory_id 属 v1 首次冻结前新增，故直接定版为 2）。
+//   - 新增必填字段 / 字段改名 / 删除字段 / 类型变更：必须递增。
+const inventorySchemaVersion = 2
 
 // inventoryJSON 是 CLI inventory --json 的对外契约。
 //
@@ -74,7 +76,7 @@ func buildInventoryJSON(r *inventory.Result, savedID *int64) inventoryJSON {
 		Name:     r.System.Name,
 		Release:  inv.Release,
 		Codename: inv.Codename,
-		Arch:     inv.Arch,
+		Arch:     canonicalArchOrKeep(inv.Arch),
 		Manager:  string(r.System.Manager),
 	}
 
@@ -90,7 +92,7 @@ func buildInventoryJSON(r *inventory.Result, savedID *int64) inventoryJSON {
 		pkgs = append(pkgs, inventoryPkg{
 			Kind:          string(p.Ref.Kind),
 			Name:          p.Ref.Name,
-			Arch:          p.Ref.Arch,
+			Arch:          canonicalArchOrKeep(p.Ref.Arch),
 			Version:       p.Ref.Version.String(),
 			SourceName:    p.SourceName,
 			SourceVersion: sourceVersionString(p.SourceVersion),
@@ -125,6 +127,16 @@ func sourceVersionString(v *domain.Version) string {
 		return ""
 	}
 	return v.String()
+}
+
+// canonicalArchOrKeep 输出规范化架构名；无法识别的架构保留原值，不丢信息。
+// 领域模型 PackageRef.Arch / Inventory.Arch 保存原始标识（dpkg=amd64、rpm=x86_64），
+// CLI JSON 对外统一规范化名（x86_64→amd64、aarch64→arm64），供下游稳定匹配。
+func canonicalArchOrKeep(s string) string {
+	if c, ok := domain.CanonicalArch(s); ok {
+		return c
+	}
+	return s
 }
 
 // formatTime 输出 UTC RFC3339；零值返回空串（表达"未知"而非伪造时间）。

@@ -68,6 +68,9 @@ func synthDebianCollector(m *cliMockRunner) func() *inventory.Collector {
 // dpkgFormatForTest 与 internal/inventory 的 dpkgQueryFormat 保持一致。
 const dpkgFormatForTest = "${binary:Package}\t${Version}\t${Architecture}\t${Source}\t${source:Version}\t${Vendor}\t${Status}\n"
 
+// rpmQueryFormatForTest 与 internal/inventory 的 rpmQueryFormat 保持一致（8 字段）。
+const rpmQueryFormatForTest = "%{NAME}\t%{EPOCHNUM}\t%{VERSION}\t%{RELEASE}\t%{ARCH}\t%{SOURCERPM}\t%{VENDOR}\t%{INSTALLTIME}\n"
+
 // runCLIWithCollector 通过真实 Main 入口（mainWithEnv）执行 CLI，仅注入采集器工厂。
 // 不复制 Main 的退出码/输出逻辑，保证与生产入口一致。
 func runCLIWithCollector(t *testing.T, factory func() *inventory.Collector, args ...string) (exitcode.Code, string, string) {
@@ -405,5 +408,48 @@ func TestInventoryJSONSchemaVersion(t *testing.T) {
 	}
 	if parsed.SchemaVersion != inventorySchemaVersion {
 		t.Errorf("schema_version 应为 %d，实际 %d", inventorySchemaVersion, parsed.SchemaVersion)
+	}
+}
+
+// TestInventoryJSONArchCanonical 验证 JSON 输出规范化架构名：
+// 采集层保留原始标识（rpm 的 x86_64 / aarch64），CLI 对外统一 amd64 / arm64。
+func TestInventoryJSONArchCanonical(t *testing.T) {
+	cfgPath, dbPath := isolatedArgs(t)
+	m := newCLIMock()
+	// rpm 系：uname -m 返回 x86_64，包架构也用 x86_64
+	m.set("uname", []string{"-m"}, "x86_64")
+	m.set("uname", []string{"-r"}, "4.18.0-553.el8_10")
+	// rpm 8 字段：NAME/EPOCHNUM/VERSION/RELEASE/ARCH/SOURCERPM/VENDOR/INSTALLTIME
+	m.set("rpm", []string{"-qa", "--qf", rpmQueryFormatForTest},
+		"kernel\t0\t4.18.0\t553.182.1.el8_10\tx86_64\tkernel-4.18.0-553.182.1.el8_10.src.rpm\tRed Hat, Inc.\t1760000000\n")
+	factory := func() *inventory.Collector {
+		return &inventory.Collector{
+			Runner: m,
+			OSPath: "/tmp/synth-rpm",
+			ReadFile: func(string) ([]byte, error) {
+				return []byte("ID=rhel\nVERSION_ID=8.10\n"), nil
+			},
+			Now: func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) },
+		}
+	}
+	_, out, _ := runCLIWithCollector(t, factory,
+		"--config", cfgPath, "--db", dbPath, "inventory", "--json")
+
+	var raw struct {
+		Distro struct {
+			Arch string `json:"arch"`
+		} `json:"distro"`
+		Packages []struct {
+			Arch string `json:"arch"`
+		} `json:"packages"`
+	}
+	if err := json.Unmarshal([]byte(out), &raw); err != nil {
+		t.Fatalf("JSON 解析失败: %v", err)
+	}
+	if raw.Distro.Arch != "amd64" {
+		t.Errorf("distro.arch 应规范化为 amd64，实际 %q", raw.Distro.Arch)
+	}
+	if len(raw.Packages) != 1 || raw.Packages[0].Arch != "amd64" {
+		t.Errorf("packages[0].arch 应规范化为 amd64，实际 %+v", raw.Packages)
 	}
 }
