@@ -30,8 +30,10 @@ CREATE TABLE distro_releases (
 );
 
 -- 情报源与信任等级 -----------------------------------------------------------
--- trust_level 是「应然」等级，validation_level 是「实然」验证程度，两者不得合并。
--- signature_kind 与 content_hash 分开记录，禁止把哈希通过表述为签名通过。
+-- trust_level 是「应然」等级，signature_status / integrity_status 是「实然」结果。
+-- signature_kind 与 content_hash 分开记录，禁止把哈希通过表述为签名通过：
+--   signature_status 记录密码学签名验证结果；
+--   integrity_status 只记录内容哈希比对结果（防传输损坏，不证明来源）。
 
 CREATE TABLE feed_sources (
     id               TEXT PRIMARY KEY,
@@ -44,8 +46,10 @@ CREATE TABLE feed_sources (
                      CHECK (signature_kind IN ('none','minisign','gpg','csaf','x509')),
     scope            TEXT NOT NULL DEFAULT 'advisory'
                      CHECK (scope IN ('advisory','metadata')),
-    validation_level TEXT NOT NULL DEFAULT 'unverified'
-                     CHECK (validation_level IN ('verified','structure-only','unverified')),
+    signature_status TEXT NOT NULL DEFAULT 'unverified'
+                     CHECK (signature_status IN ('verified','failed','missing','not-applicable','unverified')),
+    integrity_status TEXT NOT NULL DEFAULT 'unchecked'
+                     CHECK (integrity_status IN ('verified','failed','unchecked')),
     status           TEXT NOT NULL DEFAULT 'unknown'
                      CHECK (status IN ('ok','stale','error','unknown')),
     last_checked_at  TEXT,
@@ -75,14 +79,15 @@ CREATE TABLE advisories (
 
 -- 修复版本：唯一键必须锚定 发行版 + release + 渠道 + 包身份 + 架构。
 -- 少任何一个维度都会导致跨发行版覆盖或误判（见 docs/data-model.md §4.4）。
+-- 公告归属只存 (source_id, advisory_id, cve_id) 三元组并以组合外键锚定 advisories，
+-- 不再冗余 advisory_uid，从结构上消除 UID 与三元组不一致的可能。
 
 CREATE TABLE advisory_fixes (
     id                INTEGER PRIMARY KEY,
-    advisory_uid      TEXT NOT NULL REFERENCES advisories(uid) ON DELETE CASCADE,
     source_id         TEXT NOT NULL,
     advisory_id       TEXT NOT NULL,
     cve_id            TEXT NOT NULL,
-    distro_id         TEXT NOT NULL REFERENCES distros(id),
+    distro_id         TEXT NOT NULL,
     release           TEXT NOT NULL,
     channel           TEXT NOT NULL,
     package_kind      TEXT NOT NULL CHECK (package_kind IN ('source','binary')),
@@ -95,7 +100,11 @@ CREATE TABLE advisory_fixes (
     fixed_at          TEXT,
     evidence_url      TEXT NOT NULL DEFAULT '',
     UNIQUE (source_id, advisory_id, cve_id, distro_id, release, channel,
-            package_kind, package_name, arch)
+            package_kind, package_name, arch),
+    FOREIGN KEY (source_id, advisory_id, cve_id)
+        REFERENCES advisories (source_id, advisory_id, cve_id) ON DELETE CASCADE,
+    FOREIGN KEY (distro_id, release)
+        REFERENCES distro_releases (distro_id, release)
 );
 
 CREATE INDEX idx_fixes_lookup ON advisory_fixes (distro_id, release, package_kind, package_name);
@@ -117,7 +126,9 @@ CREATE TABLE advisory_not_affected (
     reason       TEXT NOT NULL
                  CHECK (reason IN ('not-affected','not-in-release','vulnerable-code-absent','end-of-life')),
     evidence_url TEXT NOT NULL DEFAULT '',
-    UNIQUE (source_id, cve_id, distro_id, release, package_kind, package_name, arch)
+    UNIQUE (source_id, cve_id, distro_id, release, package_kind, package_name, arch),
+    FOREIGN KEY (distro_id, release)
+        REFERENCES distro_releases (distro_id, release)
 );
 
 -- CVE 元数据（C 级情报源，仅用于展示与排序，不参与受影响判定）---------------
@@ -191,7 +202,8 @@ INSERT INTO distro_releases (id, distro_id, release, codename, lifecycle_state, 
     ('arch:rolling',     'arch',          'rolling', '',       'active', NULL);
 
 -- 种子数据：元信息 ----------------------------------------------------------
+-- schema 版本的唯一权威来源是 schema_migrations（见 internal/database/migrate.go），
+-- app_meta 不再冗余 schema_version，避免双记录不一致。
 
 INSERT INTO app_meta (key, value) VALUES
-    ('schema_version', '1'),
-    ('db_created_at',  strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));
+    ('db_created_at', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));
