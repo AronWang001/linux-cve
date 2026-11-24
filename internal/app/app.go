@@ -103,7 +103,19 @@ func (e *env) run(ctx context.Context, args []string) (exitcode.Code, error) {
 		return e.runInventory(ctx, cmdArgs)
 	case "help", "-h", "--help":
 		return e.runHelp(cmdArgs)
-	case "scan", "list", "show", "plan", "fix", "report", "feed", "support":
+	case "feed":
+		return e.runFeed(ctx, cmdArgs)
+	case "support":
+		return e.runSupport(ctx, cmdArgs)
+	case "scan":
+		return e.runScan(ctx, cmdArgs)
+	case "list":
+		return e.runList(ctx, cmdArgs)
+	case "show":
+		return e.runShow(ctx, cmdArgs)
+	case "report":
+		return e.runReport(ctx, cmdArgs)
+	case "plan", "fix":
 		// 已注册但未实现：明确失败，不静默返回成功
 		return exitcode.NotImplemented, apperr.NotImplementedf("%s 尚未实现（%s）", cmd, phaseOf(cmd))
 	default:
