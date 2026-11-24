@@ -54,6 +54,15 @@ func (e *env) runScan(ctx context.Context, args []string) (exitcode.Code, error)
 	sys := result.System
 	inv := result.Inventory
 
+	// 一个包都没采到，只可能是采集链路坏了（包管理器不可用、输出格式变了）。
+	// 这时继续走下去会得到「0 条判定」，报告与退出码都是「一切正常」——
+	// 正是这个工具最不该犯的错。
+	if len(inv.Packages) == 0 {
+		return exitcode.Error, apperr.Newf(exitcode.Error, "cli.scan",
+			"未采集到任何已安装包（发行版 %s %s，包管理器 %s），拒绝给出「无漏洞」结论",
+			inv.DistroID, inv.Release, sys.Manager)
+	}
+
 	d, err := e.openDB(ctx)
 	if err != nil {
 		return apperr.CodeOf(err), err
@@ -75,6 +84,14 @@ func (e *env) runScan(ctx context.Context, args []string) (exitcode.Code, error)
 		return apperr.CodeOf(covErr), covErr
 	}
 	status, detail := aggregateCoverage(coverage)
+
+	// 有包、但一个都没命中情报库：这不是「没问题」，而是「没对上」。
+	// 最常见的成因是 release 粒度不一致（3.20.3 vs 3.20）或包名桥接失效。
+	if mres.Evaluated == 0 && len(inv.Packages) > 0 {
+		status = feed.CoverageUnknown
+		detail = fmt.Sprintf("已安装 %d 个包，没有任何一个命中情报库（release %s、包名或渠道对不上），"+
+			"本次结论不可作为安全依据", len(inv.Packages), inv.Release)
+	}
 
 	counts := map[domain.VulnState]int{}
 	for _, f := range mres.Findings {

@@ -101,11 +101,46 @@ func DetectSystem(osRelease []byte, unameM, unameR string) (SystemInfo, error) {
 		return info, apperr.Newf(exitcode.Error, "inventory.system",
 			"发行版 %s 缺少 VERSION_ID/VERSION，无法确定 release", info.OSID)
 	}
+	// 情报源里的 release 是「支持线」，原始 VERSION_ID 往往更细。
+	// 不归一化就会拿 3.20.3 / 9.4 去精确匹配 3.20 / 9，一条都对不上——
+	// 判定的表现是「判定 0 条」，最容易被读成「这台机器没漏洞」。
+	// 归一化规则必须与情报源登记 release 的粒度一致，见 docs/data-sources.md。
+	info.Release = normalizeRelease(did, info.Release)
 	if info.Arch == "" || info.Kernel == "" {
 		return info, apperr.New(exitcode.Error, "inventory.system",
 			"uname 输出缺失，无法确定架构或内核版本")
 	}
 	return info, nil
+}
+
+// normalizeRelease 把 VERSION_ID 收敛到情报源登记 release 的粒度。
+//
+//   - Alpine：3.20.3 → 3.20（上游 secdb 按 minor 线发布）
+//   - RHEL 系（含 Rocky / AlmaLinux / Oracle）：9.4 → 9（补丁流共用同一支持线，
+//     公告里的 CPE 也归一为主线号）
+//   - 其余发行版保持原样：Debian 是 13，Ubuntu 是 24.04，SLES 是 15.6，
+//     openSUSE Leap 是 16.0，本身就是登记粒度
+//
+// 只做「截短」，不做「补齐」：不认识的形式原样返回，让它在支持矩阵里
+// 落成「未登记 release」，而不是猜一个看起来合理的值。
+func normalizeRelease(d domain.DistroID, release string) string {
+	switch d {
+	case domain.DistroAlpine:
+		// MAJOR.MINOR[.PATCH] → MAJOR.MINOR
+		parts := strings.SplitN(release, ".", 3)
+		if len(parts) >= 2 && parts[0] != "" && parts[1] != "" {
+			return parts[0] + "." + parts[1]
+		}
+		return release
+	case domain.DistroRHEL, domain.DistroRocky, domain.DistroAlmaLinux, domain.DistroOracle:
+		// MAJOR[.MINOR] → MAJOR
+		if i := strings.IndexByte(release, '.'); i > 0 {
+			return release[:i]
+		}
+		return release
+	default:
+		return release
+	}
 }
 
 // managerOf 由发行版族确定包管理器。SUSE 族同样走 rpm 查询接口。
