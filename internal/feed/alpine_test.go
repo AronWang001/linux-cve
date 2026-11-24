@@ -74,9 +74,9 @@ func TestAlpineParseBasics(t *testing.T) {
 		}
 	}
 
-	// 修复记录：aom main 3 条 + aom community 1 条 + openssl 1 条 = 5。
-	// unfixed-pkg 的空版本键不产出修复记录。
-	if got, want := len(res.Fixes), 5; got != want {
+	// 修复记录：aom main 3 条 + aom community 1 条 + openssl 1 条
+	// + unfixed-pkg 的 1 条空版本记录（确认受影响、无补丁）= 6。
+	if got, want := len(res.Fixes), 6; got != want {
 		t.Fatalf("修复记录数应为 %d，实际 %d", want, len(res.Fixes))
 	}
 	for _, f := range res.Fixes {
@@ -110,6 +110,24 @@ func TestAlpineParseBasics(t *testing.T) {
 	}
 	if unfixed.VendorStatus != "affected-unfixed" {
 		t.Errorf("空版本键应记为 affected-unfixed，实际 %q", unfixed.VendorStatus)
+	}
+
+	// 空版本键必须落一条版本为空的修复记录，否则该包在扫描里是「无数据」，
+	// 而事实是「有洞且无补丁」——结论正好反了。
+	var noFix int
+	for _, f := range res.Fixes {
+		if f.CVEID == "CVE-2020-0001" {
+			noFix++
+			if !f.IsAffectedNoFix() {
+				t.Errorf("空版本键的修复记录版本应为空，实际 %q", f.FixedVersion)
+			}
+			if f.Ref.Name != "unfixed-pkg" {
+				t.Errorf("空版本记录应挂在 unfixed-pkg 上，实际 %q", f.Ref.Name)
+			}
+		}
+	}
+	if noFix != 1 {
+		t.Errorf("空版本键应产出 1 条无修复版本记录，实际 %d", noFix)
 	}
 
 	// 覆盖坐标只有一个 release。

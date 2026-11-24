@@ -205,6 +205,29 @@ func (p AlpineParser) parseRepo(repo, release string, db alpineSecDB, in ParseIn
 			})
 			produced++
 
+			// 空版本键 = 发布方确认受影响但没有修复包。
+			// 丢掉这条，该包在扫描里就是「无数据」；实际是「有洞且无补丁」。
+			if unfixed[cveStr] && len(cveVersions[cveStr]) == 0 {
+				res.Fixes = append(res.Fixes, domain.AdvisoryFix{
+					AdvisoryUID: uid,
+					SourceID:    domain.SourceAlpineSecDB,
+					AdvisoryID:  advisoryID,
+					CVEID:       cve,
+					DistroID:    domain.DistroAlpine,
+					Release:     release,
+					Channel:     repo,
+					Ref: domain.PackageRef{
+						Kind: domain.PackageKindBinary,
+						Name: name,
+						Arch: domain.ArchAny,
+					},
+					FixedVersion:       "",
+					FixedVersionSource: domain.FixVersionOfficial,
+					EvidenceURL:        alpineSecDBURLOrEmpty(release, repo),
+				})
+				produced++
+			}
+
 			for _, ver := range cveVersions[cveStr] {
 				res.Fixes = append(res.Fixes, domain.AdvisoryFix{
 					AdvisoryUID: uid,

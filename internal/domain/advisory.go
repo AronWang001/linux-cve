@@ -209,11 +209,17 @@ func (f AdvisoryFix) Validate() error {
 	if f.Ref.Arch == "" {
 		return domainErr("修复记录缺少架构")
 	}
-	if f.FixedVersion == "" {
-		return domainErr("修复记录缺少固定版本")
-	}
+	// FixedVersion 允许为空，含义是「发布方确认受影响，但没有给出任何修复版本」。
+	//
+	// 空版本不是数据缺失，而是一个结论：Debian Tracker 的 status=open、
+	// Alpine secfixes 的空版本键都是这个意思。把它当异常丢掉，
+	// 这些包在扫描里就会变成「无数据」，而事实是「已知有洞且没有补丁」——
+	// 正好把最该报警的情况说反了。
 	return nil
 }
+
+// IsAffectedNoFix 判断这条记录是否为「确认受影响但无修复版本」。
+func (f AdvisoryFix) IsAffectedNoFix() bool { return f.FixedVersion == "" }
 
 // NotAffectedReason 是官方显式声明「不受影响」的类型。
 type NotAffectedReason string

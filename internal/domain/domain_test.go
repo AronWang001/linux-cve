@@ -374,7 +374,6 @@ func TestAdvisoryFixValidate(t *testing.T) {
 		"缺包类型":       func(f *AdvisoryFix) { f.Ref.Kind = "" },
 		"缺包名":        func(f *AdvisoryFix) { f.Ref.Name = "" },
 		"缺架构":        func(f *AdvisoryFix) { f.Ref.Arch = "" },
-		"缺固定版本":      func(f *AdvisoryFix) { f.FixedVersion = "" },
 		"UID与三元组不一致": func(f *AdvisoryFix) { f.AdvisoryUID = "deadbeefdeadbeef" },
 		"公告号与UID不符":  func(f *AdvisoryFix) { f.AdvisoryID = "DSA-9999-1" },
 	}
@@ -384,6 +383,20 @@ func TestAdvisoryFixValidate(t *testing.T) {
 		if err := bad.Validate(); err == nil {
 			t.Errorf("%s 应报错", name)
 		}
+	}
+
+	// 空修复版本是合法结论，不是数据缺失：Debian status=open 与
+	// Alpine 的空版本键都表达「确认受影响但没有补丁」。
+	noFix := fix
+	noFix.FixedVersion = ""
+	if err := noFix.Validate(); err != nil {
+		t.Errorf("空修复版本（确认受影响、无补丁）不应报错: %v", err)
+	}
+	if !noFix.IsAffectedNoFix() {
+		t.Error("空修复版本应被识别为 IsAffectedNoFix")
+	}
+	if fix.IsAffectedNoFix() {
+		t.Error("有修复版本时 IsAffectedNoFix 应为 false")
 	}
 }
 
