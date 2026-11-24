@@ -1,101 +1,108 @@
-# 支持矩阵（v2.0）
+# 支持矩阵
 
-三类能力分别声明、分别验收，**不得合并为一个「支持」**：
+三类能力**分别声明、分别验收**，不合并成一个「支持」：
 
-1. **检测**：能否采集资产并用官方数据判定 `VulnState`。
-2. **修复版本查询**：能否给出该 release 的官方固定版本与公告链接。
-3. **自动修复**：`plan`/`fix` 是否开放，以及是否已通过真实环境验收。
+1. **检测**：能否采集资产并用官方数据判定 `VulnState`；
+2. **修复版本查询**：能否给出该 release 的官方固定版本与公告链接；
+3. **自动修复**：`plan` / `fix` 是否开放，是否已通过实机验收。
 
-状态取值：`✅ 已验证` / `🟡 待验证`（代码就绪，缺实机验证）/ `⚠️ 受限`（部分场景）/ `❌ 不开放`。
+状态取值：`✅ 已验证`（实机跑通）/ `🟡 数据与解析器就绪，未在该发行版实机运行` /
+`⚠️ 受限`（部分场景）/ `❌ 不开放`。
 
-| 发行版 | Release | 检测 | 修复版本查询 | 自动修复 | 情报源 | 备注 |
-|--------|---------|------|--------------|----------|--------|------|
-| Debian | 12 bookworm | 🟡 | 🟡 | 🟡 待实机 | Debian Tracker JSON | 首期目标 |
-| Debian | 13 trixie | 🟡 | 🟡 | 🟡 待实机 | Debian Tracker JSON | 首期目标 |
-| Ubuntu | 22.04 jammy | 🟡 | 🟡 | 🟡 待实机 | Ubuntu OVAL + USN | 首期目标 |
-| Ubuntu | 24.04 noble | 🟡 | 🟡 | 🟡 待实机 | Ubuntu OVAL + USN | 首期目标 |
-| Amazon Linux | 2023 | 🟡 | 🟡 | 🟡 待实机 | AL2023 updateinfo | 首期目标 |
-| Amazon Linux | 2 | 🟡 Legacy | ⚠️ 未验证 | ❌ 不开放 | AL2 updateinfo（**未验证**） | EOL 2026-06-30，见 §2 |
-| RHEL | 8 / 9 | 🟡 | 🟡 | ❌ 后续 | Red Hat CSAF + VEX（主）+ OSV（交叉）+ OVAL v2（兼容） | 检测与建议先行；OVAL v2 已官方弃用 |
-| Rocky Linux | 8 / 9 | 🟡 | 🟡 | ❌ 后续 | 继承 RHEL + 自身 updateinfo | 不直接等同 RHEL |
-| AlmaLinux | 8 / 9 | 🟡 | 🟡 | ❌ 后续 | 继承 RHEL + 自身 updateinfo | 不直接等同 RHEL |
-| Oracle Linux | 8 / 9 | 🟡 | 🟡 | ❌ 后续 | Oracle OVAL + ELSA | UEK 与 RHCK 分开 |
-| SUSE / openSUSE | 15.x / Leap | 🟡 | 🟡 | ❌ 后续 | SUSE CSAF + CSAF VEX（A 级签名源） | 产品树映射复杂 |
-| Alpine | 3.19–3.21 | 🟡 | ⚠️ 部分 | ❌ 后续 | Alpine secdb | 未收录 ≠ 不受影响 |
-| Fedora | 现行 | 🟡 | 🟡 | ❌ 后续 | Bodhi + updateinfo | 生命周期短 |
-| Arch | 滚动 | 🟡 | ⚠️ 仅当前 | ❌ **不开放** | Arch 追踪器 | 见 §3 |
-| CloudLinux | 8 / 9 | ⚠️ | ⚠️ | ❌ 不开放 | 自有公告 | 数据源稳定性待评估 |
+## 1. 矩阵
 
----
+| 发行版 | Release | 检测 | 修复版本查询 | 自动修复 | 情报源 | 结束支持 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Debian | 13 trixie | ✅ 实机 | ✅ 实机 | ✅ 实机 | `debian-tracker` | 2030-06-30 |
+| Debian | 12 bookworm | 🟡 | 🟡 | ✅ 开放（同一包管理器路径） | `debian-tracker` | 2028-06-30 |
+| Debian | 11 bullseye | 🟡 | 🟡 | ❌ 已 EOL | `debian-tracker` | 2026-08-31 |
+| Ubuntu | 24.04 noble | 🟡 | 🟡 | ❌ ESM 不在覆盖范围 | `ubuntu-oval` | 2029-06-01 |
+| Ubuntu | 22.04 jammy | 🟡 | 🟡 | ❌ ESM 不在覆盖范围 | `ubuntu-oval` | 2027-06-01 |
+| Ubuntu | 24.10 oracular | 🟡 | 🟡 | ❌ 已 EOL | `ubuntu-oval` | 2025-07-01 |
+| Alpine | 3.21 / 3.20 / 3.19 | 🟡 | ⚠️ 仅当前仓库状态 | ❌ 均已 EOL | `alpine-secdb` | 2026-11-01 / 2026-04-01 / 2025-11-01 |
+| Arch | rolling | 🟡 | ⚠️ 仅当前版本 | ❌ 无固定版本语义 | `arch-tracker` | — |
+| RHEL | 10 / 9 / 8 | 🟡 | 🟡 | ❌ 本期不开放 | `rhel-csaf` | 2035-05-31 / 2032-05-31 / 2029-05-31 |
+| SLES | 15.6 (SP6) / 16.0 | 🟡 | 🟡 | ❌ 本期不开放 | `suse-csaf` | 2028-12-31 |
+| openSUSE Leap | 16.0 / 15.6 | 🟡 | 🟡 | ❌ 本期不开放 | `suse-csaf` | 2027-12-31 |
+| 其它 | 任意 | ❌ `UNSUPPORTED` | ❌ | ❌ | — | — |
 
-## 1. 首期自动修复的准入条件
+**未登记的 release 一律 `UNKNOWN`**，不按「最新的那个」兜底。理由：拿 13 的数据
+去判 14，会把「不知道」伪装成「知道」。
 
-发行版同时满足以下全部条件才开放 `fix`：
+## 2. 为什么只有 Debian 13 是 ✅
 
-1. 检测与修复版本查询均通过实机验证（非模拟）。
-2. 包管理器具备可靠的事务预演（`apt-get --dry-run`、`dnf --assumeno`）。
-3. 变更集闸门可在该管理器上解析并通过。
-4. 修复后复检确认 `VulnState == FIXED`。
+`✅` 的含义是「在这台机器上真的跑过」。v2.0.0 的验收环境是一台 Debian 13
+（x86_64）测试机，所以只有 Debian 13 的检测、修复版本查询、自动修复是 ✅。
+
+其余发行版的**解析器**与**数据**都已用真实发布物验证过（见
+[data-sources.md](data-sources.md) 的实测数字），但没有该发行版的实机跑通记录。
+这一栏宁可写 🟡，也不写「支持」——用户据此做决策，标错比不标更糟。
+
+## 3. 自动修复的准入条件
+
+同时满足才开放 `fix`：
+
+1. 检测与修复版本查询在该 release 上跑通（非模拟）；
+2. 包管理器有可靠的事务预演与幂等升级语义；
+3. 变更集闸门能在该管理器上解析（`--package` 过滤不改变判定）；
+4. 修复后复检确认 `VulnState == FIXED`；
 5. 生命周期为 `active`。
 
-未通过的项目在 `linux-cve support` 输出中显式为 `no`，`plan` 直接返回 `UNSUPPORTED`。
+按此标准，v2.0.0 只开放 Debian 12/13（`dpkg`）。RHEL / SLES 不开放的理由不是
+「技术上做不到」，而是**没有在这些发行版上做过实机验收**——`dnf` 的
+`--best` 行为、模块流（module stream）与 EUS 仓库差异都会影响结果，
+没验证过就不该动生产机。
 
----
+## 4. 各发行版的专门限制
 
-## 2. Amazon Linux 2（Legacy）`[修订 6]`
+### Debian
 
-- AL2 标准支持已于 **2026-06-30** 结束。
-- 定位：**Legacy 兼容**，只做检测与报告，`lifecycle_state='legacy'`。
-- `plan` / `fix` 在 AL2 上一律 `UNSUPPORTED`（退出码 4），报告附「系统已过支持期，建议规划迁移」提示。
-- 检测能力保留的理由：存量 AL2 主机多，能看清风险优于看不到；但不得暗示持续打补丁可长期维持。
-- **AL2 的 updateinfo 数据源尚未完成动态解析验证**（阶段 0 仅确认 `mirror.list` 可访问），因此 AL2 的修复版本查询标记 `unverified`，`RemediationState` 最高只能到 `UNKNOWN`。这与「关闭自动修复」是两条独立约束。
+- 公告按**源码包**发布，二进制包靠桥接命中。实测 455 个参与判定的包里，
+  60 个按二进制名直接命中，239 个仅按源码名命中，157 个完全无记录，
+  「源码名本应命中却未命中」为 0。
+- `status=open`（确认受影响、暂无补丁）判为 `VULNERABLE` + `NO_FIX`。
+  这类老 CVE 数量很大（实测 Linux 内核包 `linux-kbuild-6.12.94+deb13` 一项
+  就有 9,642 条），是 Debian 的真实状态，不是噪声。
 
-## 3. Arch Linux `[修订 5]`
+### Ubuntu
 
-- `pacman -Sp` 只输出下载 URL，不含依赖闭包、事务顺序、删除/替换信息，**不能作为变更集预演依据**。
-- 滚动发行版仓库不留旧版本，无法保证可复现的固定版本。
-- 结论：Arch 仅提供检测 + 人工修复建议（受影响包清单 + `pacman -Syu` 提示）。`plan`/`fix` 返回 `UNSUPPORTED`。
+- OVAL 的 `less than` 才是首次修复版本；ESM（扩展安全维护）包的修复版本
+  在公开源里不存在，因此不开放自动修复。
+- 环境条件型 definition（实测 298 个悬空引用）解析不出包名，标
+  `VendorStatus=unresolved`，不丢公告。
 
-## 4. 包管理器能力
+### Alpine
 
-| 管理器 | 固定版本安装 | 事务预演 | 锁检测 | 自动修复 |
-|--------|--------------|----------|--------|----------|
-| apt/dpkg | `pkg=version` | `--dry-run` 解析 Inst/Conf/Remv | `lock-frontend` | ✅ 首期 |
-| dnf/rpm | `pkg-epoch:ver-rel` | `--assumeno` 事务表 | `/var/lib/rpm/.rpm.lock` | ✅ 首期（AL2023） |
-| yum/rpm | 同上 | 较弱 | 同上 | ❌ |
-| zypper | `pkg=version` | `--dry-run` | zypp 锁 | ❌ 后续 |
-| apk | `pkg=version` | `--simulate` | `/lib/apk/db/lock` | ❌ 后续 |
-| pacman | 无法固定旧版本 | 无可靠预演 | `db.lck` | ❌ 不开放 |
+- secdb 只记录**当前仓库**的修复状态，历史版本不回填，因此「已修复」的判定
+  依赖本机版本与 secdb 版本的比较，而不是历史时间线。
+- 「未收录」不等于「不受影响」：secdb 只覆盖有 CVE 编号且已修复/确认的条目。
 
-## 5. 资产采集与版本比较支持矩阵 `[阶段 2]`
+### Arch
 
-验证程度分四级，不得混写：
+- 滚动发行版没有「固定版本」概念，`issues/all.json` 的 `fixed` 字段可能被
+  后续升级覆盖。只做当前状态检测，永久不开放自动修复。
+- `pacman -Sp` 无法给出可靠变更集，这一点在 v1.x 就确认过。
 
-| 级别 | 含义 |
-|------|------|
-| **A. 上游源码语义核对** | 已研读并留存上游 C/C++ 源码，算法忠实移植 |
-| **B. 本地 Go 单元测试** | 合成夹具（SYNTHETIC）驱动的 Go 测试通过 |
-| **C. 原生工具差分测试** | 用真实 `dpkg --compare-versions` / `rpmdev-vercmp` / `apk version` / `vercmp` 与 Go 实现逐一比对 |
-| **D. Linux 实机验证** | 在真实 Linux 发行版上跑 `linux-cve inventory` 并核对结果 |
+### RHEL
 
-### 5.1 版本比较引擎
+- 用 RHSA（`advisories`）而非 VEX：单份 VEX 16.8MB、共 78,041 份，
+  下载与存储都不现实；扫描需要的修复版本事实来自 RHSA。
+- CPE 的 `9.6` 归一为 `9`：补丁流共用同一支持线。
+- `under_investigation` 只留公告、不产出判定——「厂商还在查」不是一个结论。
 
-| 管理器 | A 源码核对 | B 单元测试 | C 原生差分 | D 实机验证 |
-|--------|-----------|-----------|-----------|-----------|
-| Debian dpkg | ✅ | ✅ | ❌ BLOCKED | ❌ 未做 |
-| RPM | ✅ | ✅ | ❌ BLOCKED | ❌ 未做 |
-| Alpine apk | ✅ | ✅ | ❌ BLOCKED | ❌ 未做 |
-| Arch pacman | ✅ | ✅ | ❌ BLOCKED | ❌ 未做 |
+### SLES / openSUSE Leap
 
-> **C 级 BLOCKED 原因**：开发环境为 Windows Git Bash，本机无 `dpkg` / `rpm` / `apk` / `pacman` / `vercmp`，且任务书禁止为此安装系统软件。差分测试须在后续阶段于 Linux 环境补做。
+- 修复状态用 `product_status.recommended`，不是 `fixed`。
+- 产品名是唯一坐标来源，`SUSE Linux Enterprise Server 15 SP6` → `15.6`，
+  `openSUSE Leap 16.0` → `16.0`；SLES 16 与 Leap 16 都是「16.0」，
+  必须按前缀分流（实测入库互不污染）。
+- HPC / Real Time / Manager 产品线不在覆盖范围，解析不出就跳过，不猜。
+- 主 feed 全是 `recommended`，没有「不受影响」；VEX 子目录本期不接入。
 
-### 5.2 资产采集
+## 5. 生命周期数据从哪来
 
-| 管理器 | 采集命令 | B 单元测试（SYNTHETIC） | D 实机验证 |
-|--------|----------|------------------------|-----------|
-| dpkg | `dpkg-query -W -f=...` | ✅ | ❌ 未做 |
-| rpm | `rpm -qa --qf ...` | ✅ | ❌ 未做 |
-| apk | `apk list --manifest` + `apk list --installed -v` | ✅ | ❌ 未做 |
-| pacman | `pacman -Qi` | ✅ | ❌ 未做 |
+`internal/support/matrix.go` 里的日期是手工维护的，来源是各发行版官方
+生命周期页。它**不会自动更新**：发行版宣布 EOL 延期时，必须改代码发版。
+这比「猜一个日期」诚实，也避免把 EOL 系统悄悄当成受支持系统。
 
-所有单元测试夹具均为 **SYNTHETIC**（按各工具 man page / 上游源码格式手工构造），**不是**实机采集样本。Linux 实机验证（D 级）留待后续阶段。
+`linux-cve support` 打印的就是这张表，`--json` 输出同样内容。
