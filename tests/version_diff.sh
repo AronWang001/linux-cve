@@ -104,8 +104,27 @@ while IFS= read -r line; do
       ;;
   esac
 
-  a="${line%%$'\t'*}"
-  b="${line#*$'\t'}"
+  # @管理器[,管理器]：只在这些管理器下比较语法专有的用例
+  case "$line" in
+    @*)
+      want_mgrs="${line%%$'\t'*}"
+      want_mgrs="${want_mgrs#@}"
+      rest="${line#*$'\t'}"
+      a="${rest%%$'\t'*}"
+      b="${rest#*$'\t'}"
+      hit=0
+      old_ifs="$IFS"; IFS=','
+      for mm in $want_mgrs; do
+        [ "$mm" = "$MANAGER" ] && hit=1
+      done
+      IFS="$old_ifs"
+      [ "$hit" -eq 1 ] || continue
+      ;;
+    *)
+      a="${line%%$'\t'*}"
+      b="${line#*$'\t'}"
+      ;;
+  esac
   a="$(printf '%s' "$a" | xargs)"
   b="$(printf '%s' "$b" | xargs)"
 
