@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/database"
 	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
 )
 
@@ -19,6 +21,16 @@ func runCLI(t *testing.T, args ...string) (exitcode.Code, string, string) {
 	var out, errOut bytes.Buffer
 	code := Main(context.Background(), args, &out, &errOut)
 	return code, out.String(), errOut.String()
+}
+
+// mustMigrations 返回内嵌迁移列表，供测试动态断言数量而非写死。
+func mustMigrations(t *testing.T) []database.Migration {
+	t.Helper()
+	ms, err := database.LoadMigrations()
+	if err != nil {
+		t.Fatalf("读取内嵌迁移失败: %v", err)
+	}
+	return ms
 }
 
 // isolatedArgs 生成隔离环境参数：临时配置文件 + 临时数据库，避免读写真实路径。
@@ -63,8 +75,11 @@ func TestVersionJSON(t *testing.T) {
 }
 
 // TestUnimplementedCommands 未实现的子命令必须明确失败，不能静默成功。
+//
+// 名单随阶段推进收缩：scan/list/show/report/feed/support 已实现，
+// 只剩 plan 与 fix 仍处于「已注册但未实现」。
 func TestUnimplementedCommands(t *testing.T) {
-	for _, cmd := range []string{"scan", "list", "show", "plan", "fix", "report", "feed", "support"} {
+	for _, cmd := range []string{"plan", "fix"} {
 		code, out, errOut := runCLI(t, cmd)
 		if code != exitcode.NotImplemented {
 			t.Errorf("%s 退出码应为 8，实际 %d", cmd, code)
@@ -74,6 +89,22 @@ func TestUnimplementedCommands(t *testing.T) {
 		}
 		if !strings.Contains(errOut, "尚未实现") {
 			t.Errorf("%s 应说明未实现，实际 %q", cmd, errOut)
+		}
+	}
+}
+
+// TestCommandsRequireArguments 缺参数的子命令必须是用法错误，不能退化成静默成功。
+//
+// 只覆盖真正需要参数的命令：scan/list/report 无参数是合法用法
+// （默认针对本机 / 最近一次扫描），它们的退出码由 scanExitCode 的测试覆盖。
+func TestCommandsRequireArguments(t *testing.T) {
+	for _, cmd := range []string{"feed", "show"} {
+		code, out, errOut := runCLI(t, cmd)
+		if code != exitcode.Usage {
+			t.Errorf("%s 无参数时退出码应为 2（用法错误），实际 %d（stderr %q）", cmd, code, errOut)
+		}
+		if out != "" {
+			t.Errorf("%s 无参数时不应向 stdout 输出内容，实际 %q", cmd, out)
 		}
 	}
 }
@@ -134,8 +165,10 @@ func TestDBCommands(t *testing.T) {
 	if code != exitcode.OK {
 		t.Fatalf("db migrate 退出码应为 0，实际 %d（%s）", code, errOut)
 	}
-	if !strings.Contains(out, "applied 2 migration(s); schema version = 2") {
-		t.Errorf("迁移输出不符，实际 %q", out)
+	// 迁移数量随版本演进，不能写死：只断言「全部应用完毕」且版本一致。
+	wantN := len(mustMigrations(t))
+	if !strings.Contains(out, fmt.Sprintf("applied %d migration(s); schema version = %d", wantN, wantN)) {
+		t.Errorf("迁移输出不符（期望 %d 个迁移），实际 %q", wantN, out)
 	}
 
 	// 再次迁移应无待应用项
@@ -149,7 +182,8 @@ func TestDBCommands(t *testing.T) {
 	if code != exitcode.OK {
 		t.Fatalf("db status 退出码应为 0，实际 %d", code)
 	}
-	for _, want := range []string{"schema      : 2", "0001_init", "0002_inventory", "pending     : none"} {
+	wants := []string{fmt.Sprintf("schema      : %d", len(mustMigrations(t))), "0001_init", "0002_inventory", "pending     : none"}
+	for _, want := range wants {
 		if !strings.Contains(out, want) {
 			t.Errorf("状态输出应包含 %q，实际 %q", want, out)
 		}

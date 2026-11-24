@@ -176,7 +176,7 @@ func (e *env) printHelp(w io.Writer) {
 
 退出码:
   0 成功  2 参数错误  3 发现漏洞  4 不支持  5 权限不足
-  6 修复失败  7 完整性校验失败  8 未实现  130 中断
+  6 修复失败  7 完整性校验失败  8 未实现  9 覆盖不足  130 中断
 `)
 }
 
@@ -189,8 +189,27 @@ func (e *env) printCommandHelp(w io.Writer, cmd string) {
 		fmt.Fprint(w, "用法: linux-cve db status | linux-cve db migrate\n")
 	case "inventory":
 		fmt.Fprint(w, "用法: linux-cve inventory [--json] [--save]\n\n  采集本机资产（软件包、内核、发行版）。\n  --json   以 JSON 输出采集结果\n  --save   将采集结果持久化到数据库\n")
-	case "scan", "list", "show", "plan", "fix", "report", "feed", "support":
-		fmt.Fprintf(w, "%s 尚未实现（%s），当前为阶段 1，仅 version / db / help 可用。\n", cmd, phaseOf(cmd))
+	case "feed":
+		fmt.Fprint(w, "用法: linux-cve feed update [源...] | linux-cve feed status [--json]\n\n"+
+			"  更新漏洞情报库 / 查看各情报源状态。\n"+
+			"  不带源名时更新全部已接入的源；源名见 feed status 的 ID 列。\n")
+	case "support":
+		fmt.Fprint(w, "用法: linux-cve support [--json]\n\n  打印发行版支持矩阵与自动修复许可。\n")
+	case "scan":
+		fmt.Fprint(w, "用法: linux-cve scan [--json] [--dry-run]\n\n"+
+			"  采集本机资产并对照情报库判定。\n"+
+			"  --json     以 JSON 输出\n"+
+			"  --dry-run  只判定不写库\n")
+	case "list":
+		fmt.Fprint(w, "用法: linux-cve list [--json] [--vulnerable] [--state 状态] [--limit N]\n\n"+
+			"  列出最近一次扫描的判定结果。\n")
+	case "show":
+		fmt.Fprint(w, "用法: linux-cve show <CVE-ID> [--json]\n\n  查看单个 CVE 的判定依据。\n")
+	case "report":
+		fmt.Fprint(w, "用法: linux-cve report [--json] [--save <路径>]\n\n"+
+			"  输出最近一次扫描的报告（默认 Markdown）。\n")
+	case "plan", "fix":
+		fmt.Fprintf(w, "%s 尚未实现（%s）。\n", cmd, phaseOf(cmd))
 	default:
 		fmt.Fprintf(w, "未知命令: %s\n", cmd)
 		e.printHelp(w)

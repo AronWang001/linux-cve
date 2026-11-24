@@ -26,6 +26,12 @@ const (
 	RemediationFailed Code = 6
 	// Integrity 数据库校验失败、迁移校验和不符、情报签名校验失败。
 	Integrity Code = 7
+	// Coverage 扫描完成，但情报覆盖不足，结论不能当作「安全」的依据。
+	//
+	// 与 Error 区分：命令本身没坏，只是没有足够数据下结论。
+	// 与 Findings 区分：这里的「零漏洞」可能只是「没检查到」。
+	// 缺了它，CI 会把「没数据」当成「没问题」。
+	Coverage Code = 9
 	// NotImplemented 该阶段尚未实现。
 	NotImplemented Code = 8
 	// Interrupted 被 SIGINT 中断。
@@ -42,6 +48,7 @@ var names = map[Code]string{
 	RemediationFailed: "REMEDIATION_FAILED",
 	Integrity:         "INTEGRITY",
 	NotImplemented:    "NOT_IMPLEMENTED",
+	Coverage:          "COVERAGE",
 	Interrupted:       "INTERRUPTED",
 }
 
