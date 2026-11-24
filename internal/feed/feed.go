@@ -77,6 +77,11 @@ type Source struct {
 	// 为 true 时 URL 含 %s 占位符，由调用方传入 release 标识。
 	NeedRelease bool
 
+	// Archive 表示发布物是压缩包（Ubuntu OVAL 用 bzip2）。
+	// Artifact 存的是原始压缩字节（那才是发布方签发的东西），
+	// 只把解压结果交给解析器；两者不能混为一谈。
+	Archive bool
+
 	// Disabled 表示本期不接入该源（含原因），不得静默跳到「无漏洞」结论。
 	Disabled       bool
 	DisabledReason string
@@ -115,6 +120,20 @@ func (s Source) URLFor(release string) (string, error) {
 		return "", fmt.Errorf("feed: 情报源 %s 声明按 release 分文件但 URL 没有占位符", s.ID)
 	}
 	return fmt.Sprintf(s.URL, release), nil
+}
+
+// URLForRepo 展开「按 release 且按仓库分文件」的 URL 模板（形如 .../v%s/%s.json）。
+//
+// 单独一个方法而不是复用 URLFor：Alpine 的两份文件是同一 release 的
+// 不同仓库，少一个参数就会把两个请求指向同一个地址。
+func (s Source) URLForRepo(release, repo string) (string, error) {
+	if release == "" || repo == "" {
+		return "", fmt.Errorf("feed: 情报源 %s 需要 release 与仓库参数", s.ID)
+	}
+	if strings.Count(s.URL, "%s") != 2 {
+		return "", fmt.Errorf("feed: 情报源 %s 的 URL 模板应含两个 %%s 占位符（release、仓库），实际 %q", s.ID, s.URL)
+	}
+	return fmt.Sprintf(s.URL, release, repo), nil
 }
 
 // Artifact 是不可变的原始情报文件，按内容哈希内容寻址。

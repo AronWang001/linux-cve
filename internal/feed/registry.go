@@ -33,11 +33,17 @@ const (
 	// URLSUSEPublicKey 是 SUSE 官方目录内声明的公钥文件（无 provider-metadata.json）。
 	URLSUSEPublicKey = "https://ftp.suse.com/pub/projects/security/keys/security-automation.asc"
 
-	// URLAlpineSecDBTemplate 按 release 分文件：v3.20/main.json。
+	// URLAlpineSecDBTemplate 按 release 与仓库分文件：v3.20/main.json。
+	//
+	// 模板含两个占位符，顺序固定为 release、仓库，由 Source.URLForRepo 展开。
 	URLAlpineSecDBTemplate = "https://secdb.alpinelinux.org/v%s/%s.json"
 
 	// URLArchTracker 是 Arch 全量追踪数据（单个 JSON，无 ETag）。
-	URLArchTracker = "https://security.archlinux.org/all.json"
+	//
+	// 2026-11-24 实测：/all.json 返回 308 永久重定向到 /issues/all.json。
+	// 直接固化最终地址，避免每次抓取都多一跳，也避免重定向目标再次变化时
+	// 静默把 HTML 错误页当数据（旧地址目前返回的是 279 字节的重定向页）。
+	URLArchTracker = "https://security.archlinux.org/issues/all.json"
 )
 
 // 解析器版本：格式或字段映射变化时递增，便于判断是否需要重建归一化数据。
@@ -97,6 +103,7 @@ func Sources() []Source {
 			ParserVersion: ParserVersionUbuntu,
 			MaxBytes:      DefaultMaxBytes,
 			NeedRelease:   true,
+			Archive:       true,
 		},
 		{
 			ID:            domain.SourceRHELCSAF,

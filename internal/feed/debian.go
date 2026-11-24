@@ -183,10 +183,10 @@ func (p DebianParser) parsePackage(pkg string, cves map[string]debianCVERecord,
 			uid := domain.AdvisoryUID(domain.SourceDebianTracker, advisoryID, cve)
 
 			res.Advisories = append(res.Advisories, domain.Advisory{
-				UID:            uid,
-				SourceID:       domain.SourceDebianTracker,
-				AdvisoryID:     advisoryID,
-				CVEID:          cve,
+				UID:        uid,
+				SourceID:   domain.SourceDebianTracker,
+				AdvisoryID: advisoryID,
+				CVEID:      cve,
 				// Debian 的 description 是 CVE Program 的描述文本，
 				// 不属于 advisory 自身标题，也不宜整份复制入库。
 				Title:          "",

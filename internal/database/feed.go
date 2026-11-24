@@ -42,13 +42,13 @@ type SourceStatus struct {
 	LastError     string
 
 	// 当前生效快照
-	ActiveSnapshot   string
-	SnapshotAt       *time.Time
-	Advisories       int
-	Fixes            int
-	NotAffected      int
-	ParserVersion    string
-	ArtifactCount    int
+	ActiveSnapshot string
+	SnapshotAt     *time.Time
+	Advisories     int
+	Fixes          int
+	NotAffected    int
+	ParserVersion  string
+	ArtifactCount  int
 	// Age 由调用方按当前时间计算；这里只给出快照完成时间。
 }
 
@@ -152,6 +152,33 @@ func (d *DB) ActiveSnapshot(ctx context.Context, sourceID domain.SourceID) (stri
 		return "", apperr.Wrap(exitcode.Error, "database.feed", "查询生效快照失败", err)
 	}
 	return id, nil
+}
+
+// LastArtifact 返回某源最近一次成功抓取的 Artifact，用于条件请求与内容比对。
+// 无记录时返回 false，不当作错误。
+func (d *DB) LastArtifact(ctx context.Context, sourceID domain.SourceID) (ArtifactRow, bool, error) {
+	var a ArtifactRow
+	var sig, integ string
+	var fetched string
+	err := d.db.QueryRowContext(ctx, `
+SELECT sha256, source_id, size_bytes, download_url, fetched_at,
+       signature_status, integrity_status, stored_path, etag, last_modified
+FROM feed_artifacts WHERE source_id = ?
+ORDER BY fetched_at DESC LIMIT 1`, string(sourceID)).Scan(
+		&a.SHA256, &a.SourceID, &a.SizeBytes, &a.DownloadURL, &fetched,
+		&sig, &integ, &a.StoredPath, &a.ETag, &a.LastModified)
+	if err == sql.ErrNoRows {
+		return ArtifactRow{}, false, nil
+	}
+	if err != nil {
+		return ArtifactRow{}, false, apperr.Wrap(exitcode.Error, "database.feed", "查询最近 Artifact 失败", err)
+	}
+	if t, perr := time.Parse(time.RFC3339, fetched); perr == nil {
+		a.FetchedAt = t
+	}
+	a.SignatureStatus = domain.SignatureStatus(sig)
+	a.IntegrityStatus = domain.IntegrityStatus(integ)
+	return a, true, nil
 }
 
 // SetMeta 写入或更新 app_meta 键值。
