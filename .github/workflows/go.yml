@@ -211,7 +211,10 @@ jobs:
             src="artifacts/linux-cve-linux-${arch}/linux-cve"
             test -f "$src" || { echo "缺少 ${arch} 二进制"; exit 1; }
             name="linux-cve_${version}_linux_${arch}"
-            tar -czf "release/${name}.tar.gz" -C "$(dirname "$src")" linux-cve
+            # upload-artifact 不保留可执行位，直接打包会得到一个权限为 0644
+            # 的二进制，解包后 ./linux-cve 是 Permission denied。
+            chmod 0755 "$src"
+            tar -czvf "release/${name}.tar.gz" -C "$(dirname "$src")" linux-cve
           done
           install -m 0755 packaging/install.sh release/install.sh
           ( cd release && sha256sum ./*.tar.gz > SHA256SUMS && cat SHA256SUMS )
