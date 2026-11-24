@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -24,11 +25,42 @@ import (
 	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/support"
 )
 
+// pkgFilter 是 --package 的取值集合（逗号分隔，可重复出现）。
+//
+// 提供这个开关的唯一理由是范围控制：默认修复「扫描判定的全部受影响包」，
+// 而在生产机上往往要先只修一两个包验证行为。少一个开关，用户就只能
+// 用包管理器手工做，绕开复检——那才是真正的风险。
+type pkgFilter []string
+
+func (f *pkgFilter) String() string { return strings.Join(*f, ",") }
+
+func (f *pkgFilter) Set(v string) error {
+	for _, part := range strings.Split(v, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			*f = append(*f, part)
+		}
+	}
+	return nil
+}
+
+// allowed 返回包名判定函数；未指定过滤时返回 nil 表示全部允许。
+func (f pkgFilter) allowed() func(string) bool {
+	if len(f) == 0 {
+		return nil
+	}
+	set := make(map[string]struct{}, len(f))
+	for _, name := range f {
+		set[name] = struct{}{}
+	}
+	return func(name string) bool { _, ok := set[name]; return ok }
+}
+
 // buildPlan 从最近一次扫描结果生成计划。
 //
 // 复用最近一次扫描而不是重新判定：修复计划必须与用户看过的清单一致，
 // 否则「我批准的那份」与「实际执行的那份」不是同一份。
-func (e *env) buildPlan(ctx context.Context, d *database.DB, entry support.Entry) (*plan.Plan, database.ScanRow, error) {
+func (e *env) buildPlan(ctx context.Context, d *database.DB, entry support.Entry,
+	only func(string) bool) (*plan.Plan, database.ScanRow, error) {
 	scan, ok, err := d.LatestScan(ctx)
 	if err != nil {
 		return nil, scan, err
@@ -44,6 +76,9 @@ func (e *env) buildPlan(ctx context.Context, d *database.DB, entry support.Entry
 
 	cands := make([]plan.Candidate, 0, len(rows))
 	for _, r := range rows {
+		if only != nil && !only(r.Package) {
+			continue
+		}
 		cands = append(cands, plan.Candidate{
 			Package: r.Package, Arch: r.Arch, Installed: r.Installed, Fixed: r.Fixed,
 			CVE: r.CVEID, Severity: r.Severity, Vuln: r.Vuln,
@@ -54,6 +89,15 @@ func (e *env) buildPlan(ctx context.Context, d *database.DB, entry support.Entry
 	}
 	manager := managerForDistro(domain.DistroID(scan.DistroID))
 	p := plan.Build(domain.DistroID(scan.DistroID), scan.Release, manager, cands, entry, time.Now().UTC())
+
+	// 配置开关是硬闸门：默认关闭，`--yes` 也不能绕过。
+	// 这条判断必须放在这里而不是 runFix 里，plan 也要显示「为什么不可执行」，
+	// 否则用户看到的是一份看似可执行的计划，执行时才被拒。
+	if !e.cfg.Remediation.AllowAutoFix {
+		p.Blocked = true
+		p.Reason = domain.ReasonPlanBlocked
+		p.BlockedDetail = "配置未开启自动修复（remediation.allow_auto_fix = false）"
+	}
 	return p, scan, nil
 }
 
@@ -81,7 +125,9 @@ func (e *env) runPlan(ctx context.Context, args []string) (exitcode.Code, error)
 	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
 	fs.SetOutput(e.stderr)
 	var asJSON bool
+	var filter pkgFilter
 	fs.BoolVar(&asJSON, "json", false, "以 JSON 输出")
+	fs.Var(&filter, "package", "只处理指定包（逗号分隔，可重复）")
 	if err := fs.Parse(args); err != nil {
 		return exitcode.Usage, nil
 	}
@@ -110,9 +156,15 @@ func (e *env) runPlan(ctx context.Context, args []string) (exitcode.Code, error)
 			Note: "该 release 未登记在支持矩阵中"}
 	}
 
-	p, scan, err := e.buildPlan(ctx, d, entry)
+	p, scan, err := e.buildPlan(ctx, d, entry, filter.allowed())
 	if err != nil {
 		return apperr.CodeOf(err), err
+	}
+	if len(filter) > 0 && len(p.Steps) == 0 {
+		// 过滤后没有命中，多半是包名写错或该包本来就不受影响。
+		// 静默返回「没有可修复项」会让人以为修复完成，必须说清。
+		fmt.Fprintf(e.stdout, "指定的包 %s 在本次扫描中没有可执行的修复步骤。\n",
+			strings.Join(filter, ","))
 	}
 
 	if asJSON {
@@ -201,9 +253,11 @@ func (e *env) runFix(ctx context.Context, args []string) (exitcode.Code, error) 
 	fs := flag.NewFlagSet("fix", flag.ContinueOnError)
 	fs.SetOutput(e.stderr)
 	var asJSON, yes, dryRun bool
+	var filter pkgFilter
 	fs.BoolVar(&asJSON, "json", false, "以 JSON 输出")
 	fs.BoolVar(&yes, "yes", false, "确认执行（无此参数只打印计划）")
 	fs.BoolVar(&dryRun, "dry-run", false, "只打印计划，不执行")
+	fs.Var(&filter, "package", "只处理指定包（逗号分隔，可重复）")
 	if err := fs.Parse(args); err != nil {
 		return exitcode.Usage, nil
 	}
@@ -212,7 +266,7 @@ func (e *env) runFix(ctx context.Context, args []string) (exitcode.Code, error) 
 	}
 	if !yes || dryRun {
 		// 没有确认就当作预演：绝不因为「参数忘了写」就动系统。
-		code, err := e.runPlan(ctx, nil)
+		code, err := e.runPlan(ctx, filterArgs(filter))
 		if err != nil {
 			return code, err
 		}
@@ -243,19 +297,35 @@ func (e *env) runFix(ctx context.Context, args []string) (exitcode.Code, error) 
 		entry = support.Entry{Distro: domain.DistroID(scan.DistroID), Version: scan.Release,
 			Note: "该 release 未登记在支持矩阵中"}
 	}
-	p, scan, err := e.buildPlan(ctx, d, entry)
+	p, scan, err := e.buildPlan(ctx, d, entry, filter.allowed())
 	if err != nil {
 		return apperr.CodeOf(err), err
 	}
+	// 闸门判断必须在「没有步骤」之前：被闸门拦下的计划也常常没有步骤，
+	// 先判 0 会把「配置禁止自动修复」报成「没有需要修复的项」，
+	// 脚本读退出码就会以为一切正常。
 	if p.Blocked {
 		e.printPlan(p, scan)
 		return exitcode.Unsupported, apperr.Newf(exitcode.Unsupported, "cli.fix",
 			"计划不可执行：%s", p.BlockedDetail)
 	}
+	if len(filter) > 0 && len(p.Steps) == 0 {
+		e.printPlan(p, scan)
+		fmt.Fprintf(e.stdout, "指定的包 %s 没有可执行的修复步骤，未做任何改动。\n",
+			strings.Join(filter, ","))
+		return exitcode.OK, nil
+	}
 	if len(p.Steps) == 0 {
 		e.printPlan(p, scan)
 		fmt.Fprintln(e.stdout, "没有需要自动修复的项。")
 		return exitcode.OK, nil
+	}
+
+	// 执行前留一份包清单：升级可能顺带装上依赖，那是变更集之外的改动。
+	// 没有这份快照，就只能事后听包管理器自己说装了什么。
+	before, berr := e.collectVersions(ctx)
+	if berr != nil {
+		return apperr.CodeOf(berr), berr
 	}
 
 	runner := plan.OSRunner{}
@@ -272,6 +342,9 @@ func (e *env) runFix(ctx context.Context, args []string) (exitcode.Code, error) 
 		return apperr.CodeOf(cerr), cerr
 	}
 	verifications, allOK := plan.Verify(p, current)
+	collateral := diffPackages(before, current)
+	limit := e.cfg.Remediation.MaxCollateralPackages
+	overLimit := limit > 0 && len(collateral.Added) > limit
 
 	if asJSON {
 		b, _ := json.MarshalIndent(map[string]any{
@@ -279,11 +352,13 @@ func (e *env) runFix(ctx context.Context, args []string) (exitcode.Code, error) 
 			"scan_id":        scan.ID,
 			"steps":          execRes.Applied,
 			"verified":       verifications,
-			"ok":             allOK && execRes.Failed == nil,
+			"collateral":     collateral,
+			"ok":             allOK && execRes.Failed == nil && !overLimit,
 		}, "", "  ")
 		fmt.Fprintln(e.stdout, string(b))
 	} else {
 		e.printFixResult(execRes, verifications, allOK)
+		e.printCollateral(collateral, limit)
 	}
 
 	if execRes.Failed != nil {
@@ -294,7 +369,61 @@ func (e *env) runFix(ctx context.Context, args []string) (exitcode.Code, error) 
 		return exitcode.RemediationFailed, apperr.New(exitcode.RemediationFailed, "cli.fix",
 			"复检未通过：仍有包低于目标版本")
 	}
+	if overLimit {
+		return exitcode.RemediationFailed, apperr.Newf(exitcode.RemediationFailed, "cli.fix",
+			"附带变更 %d 个包，超过上限 %d（remediation.max_collateral_packages），请人工复核",
+			len(collateral.Added), limit)
+	}
 	return exitcode.OK, nil
+}
+
+// pkgDiff 是执行前后的包集合差异。
+type pkgDiff struct {
+	Added   []string `json:"added"`
+	Removed []string `json:"removed"`
+}
+
+// diffPackages 比较执行前后的包清单。
+//
+// 只关心「包名 × 架构」的增删，不关心版本变化——版本变化是计划内的事。
+// 但「顺带装了 27 个新包」不是计划内的事，必须报出来。
+func diffPackages(before, after map[string]string) pkgDiff {
+	var d pkgDiff
+	for k := range after {
+		if _, ok := before[k]; !ok {
+			d.Added = append(d.Added, pkgLabel(k))
+		}
+	}
+	for k := range before {
+		if _, ok := after[k]; !ok {
+			d.Removed = append(d.Removed, pkgLabel(k))
+		}
+	}
+	sort.Strings(d.Added)
+	sort.Strings(d.Removed)
+	return d
+}
+
+// pkgLabel 把「名\x00架构」还原成可读形式。
+func pkgLabel(k string) string {
+	if i := strings.IndexByte(k, 0); i >= 0 {
+		return k[:i] + " (" + k[i+1:] + ")"
+	}
+	return k
+}
+
+// printCollateral 输出附带变更。
+func (e *env) printCollateral(d pkgDiff, limit int) {
+	if len(d.Added) == 0 && len(d.Removed) == 0 {
+		return
+	}
+	if len(d.Added) > 0 {
+		fmt.Fprintf(e.stdout, "\n附带安装 %d 个包（上限 %d）：%s\n",
+			len(d.Added), limit, strings.Join(d.Added, ", "))
+	}
+	if len(d.Removed) > 0 {
+		fmt.Fprintf(e.stdout, "附带移除 %d 个包：%s\n", len(d.Removed), strings.Join(d.Removed, ", "))
+	}
 }
 
 // collectVersions 复检时重新采集已安装版本。
@@ -366,3 +495,12 @@ func oneLine(s string) string {
 
 // isRoot 判断当前进程是否具备升级软件包的权限。
 func isRoot() bool { return os.Geteuid() == 0 }
+
+// filterArgs 把 fix 的过滤参数转成 plan 的参数，用于「不带 --yes」时的预演。
+// 只转 --package：--yes/--dry-run/--json 对 plan 没有意义或有歧义。
+func filterArgs(f pkgFilter) []string {
+	if len(f) == 0 {
+		return nil
+	}
+	return []string{"--package", strings.Join(f, ",")}
+}
