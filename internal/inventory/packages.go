@@ -223,14 +223,19 @@ func joinEVR(epoch int, up, rel string) string {
 //
 // 第二条只提供架构与 {origin}，以 name-version 全串与第一条关联；
 // 第一条缺关联时保底仍有 name/version，不丢包。
+//
+// --manifest 只有 apk-tools 3.x 才有：Alpine 3.20 自带 2.14，跑起来是
+// "apk: unrecognized option: manifest"，整次采集直接失败。所以这里必须
+// 有回退：只用 -v 明细，按「后缀能否解析成合法 apk 版本」切分 name 与 version。
+// 这不是猜——切出来的版本必须通过 apk 版本解析器，否则换下一个切分点。
 func collectAPK(ctx context.Context, r Runner) ([]domain.InstalledPackage, []string, error) {
-	manifest, err := r.Run(ctx, "apk", "list", "--manifest")
-	if err != nil {
-		return nil, nil, err
-	}
+	manifest, manifestErr := r.Run(ctx, "apk", "list", "--manifest")
 	detail, err := r.Run(ctx, "apk", "list", "--installed", "-v")
 	if err != nil {
 		return nil, nil, err
+	}
+	if manifestErr != nil {
+		return collectAPKFromDetail(detail, manifestErr)
 	}
 
 	// name-version 全串 → 架构与来源
@@ -293,6 +298,82 @@ func collectAPK(ctx context.Context, r Runner) ([]domain.InstalledPackage, []str
 		pkgs = append(pkgs, p)
 	}
 	return pkgs, warns, nil
+}
+
+// collectAPKFromDetail 在 apk list --manifest 不可用时，只从 -v 明细解析。
+//
+// 明细行形如：
+//
+//	busybox-1.36.1-r29 x86_64 {busybox} (GPL-2.0-only) [installed]
+//
+// 第一列是 name-version 连写，没有分隔符可用，只能按「哪个切分点能让右侧
+// 成为合法 apk 版本」来判断。从右往左取第一个可解析的切分点：包名可以含 '-',
+// 版本不能含 '-'（apk 版本里 '-' 不是合法字符），所以从右往左遇到 '-' 就试，
+// 第一次成功即终止。整行都试不通才跳过并计数，不猜一个版本出来。
+func collectAPKFromDetail(detail []byte, cause error) ([]domain.InstalledPackage, []string, error) {
+	var (
+		pkgs  []domain.InstalledPackage
+		warns []string
+	)
+	warns = append(warns, fmt.Sprintf(
+		"apk list --manifest 不可用（%v），改用 apk list --installed -v 解析", cause))
+
+	for i, line := range strings.Split(string(detail), "\n") {
+		f := strings.Fields(line)
+		if len(f) < 2 {
+			continue // 空行 / 描述行
+		}
+		full := f[0]
+		arch := f[1]
+
+		var origin string
+		for _, tok := range f[2:] {
+			if strings.HasPrefix(tok, "{") && strings.HasSuffix(tok, "}") {
+				origin = strings.Trim(tok, "{}")
+				break
+			}
+		}
+
+		name, rawVer, ok := splitAPKNameVersion(full)
+		if !ok {
+			warns = append(warns, fmt.Sprintf("apk 第 %d 行无法切分包名与版本：%q", i+1, full))
+			continue
+		}
+
+		ver, vwarn := parseVersionOrKeep(domain.ManagerAPK, rawVer)
+		if vwarn != "" {
+			warns = append(warns, name+": "+vwarn)
+		}
+		pkgs = append(pkgs, domain.InstalledPackage{
+			Ref: domain.PackageRef{
+				Kind:    domain.PackageKindBinary,
+				Name:    name,
+				Arch:    arch,
+				Version: ver,
+			},
+			SourceName:    origin,
+			Manager:       domain.ManagerAPK,
+			OriginChannel: domain.ChannelUnknown,
+		})
+	}
+	return pkgs, warns, nil
+}
+
+// splitAPKNameVersion 把 "name-version" 切成两段，要求右侧是合法 apk 版本。
+func splitAPKNameVersion(full string) (string, string, bool) {
+	for i := len(full) - 1; i > 0; i-- {
+		if full[i] != '-' {
+			continue
+		}
+		name, ver := full[:i], full[i+1:]
+		if name == "" || ver == "" {
+			continue
+		}
+		if _, warn := parseVersionOrKeep(domain.ManagerAPK, ver); warn == "" {
+			return name, ver, true
+		}
+	}
+	return "", "", false
 }
 
 // collectPacman 采集 Arch 已安装包（pacman -Qi 全量输出按块解析）。

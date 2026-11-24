@@ -37,7 +37,9 @@ jobs:
           - name: Alpine (apk)
             image: alpine:3.20
             manager: apk
-            install: "true" # apk 已内置
+            # alpine 镜像是 busybox ash，没有 bash；差分脚本用 bash 写，
+            # 缺 bash 时 runner 直接报 "bash: not found"，不是测试失败而是环境缺失。
+            install: "apk add --no-cache bash"
           - name: Arch (pacman)
             image: archlinux:latest
             manager: pacman
