@@ -217,7 +217,9 @@ jobs:
             tar -czvf "release/${name}.tar.gz" -C "$(dirname "$src")" linux-cve
           done
           install -m 0755 packaging/install.sh release/install.sh
-          ( cd release && sha256sum ./*.tar.gz > SHA256SUMS && cat SHA256SUMS )
+          # 不带 ./ 前缀：install.sh 的校验和匹配要同时吃下 name / ./name / *name 三种写法，
+          # 但发布物本身规范一点，少一个变量。
+          ( cd release && sha256sum ./*.tar.gz | sed 's|  \./|  |' > SHA256SUMS && cat SHA256SUMS )
 
       - name: 创建 Release
         uses: softprops/action-gh-release@v2

@@ -55,7 +55,16 @@ fetch "${BASE}/${tarball}" "${tmp}/${tarball}"
 say "下载 SHA256SUMS"
 fetch "${BASE}/SHA256SUMS" "${tmp}/SHA256SUMS"
 
-want=$(grep " ${tarball}\$" "${tmp}/SHA256SUMS" | awk '{print $1}')
+# SHA256SUMS 的写法不止一种：`sha256sum *.tar.gz` 给的是 "hash  name"，
+# `sha256sum ./*.tar.gz` 给的是 "hash  ./name"，某些工具还会写成 "*name"。
+# 只认一种写法就会在另一种上误报「没有记录」，白白挡住安装。
+want=$(awk -v f="${tarball}" '
+  {
+    n = $NF
+    sub(/^\*/, "", n)
+    sub(/^\.\//, "", n)
+    if (n == f) { print $1; exit }
+  }' "${tmp}/SHA256SUMS")
 [ -n "${want}" ] || die "SHA256SUMS 中没有 ${tarball} 的记录"
 
 if command -v sha256sum >/dev/null 2>&1; then
