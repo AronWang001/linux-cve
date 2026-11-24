@@ -25,6 +25,25 @@ CVE against any installed package.
 
 Current version **v2.0.0**; see [CHANGELOG.md](CHANGELOG.md).
 
+## Install
+
+Single-machine install (detects the architecture, verifies SHA256, drops the binary
+in `/usr/local/bin`, writes no config):
+
+```bash
+curl -fsSL https://github.com/AronWang001/linux-cve/releases/download/v2.0.0/install.sh | sudo sh
+```
+
+Pin a version or destination:
+
+```bash
+VERSION=v2.0.0 DEST=/usr/local/bin sh install.sh
+```
+
+Prebuilt packages exist for amd64 and arm64 only; for other architectures, or to
+build from source, see [Building from source](#build-from-source). The old
+repository name `linux-cve-2026-98432-fix` still redirects (301).
+
 ## Quick start
 
 ```bash

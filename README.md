@@ -19,6 +19,23 @@ v2 用同一套判定模型覆盖任意 CVE、任意已安装包。
 
 当前版本 **v2.0.0**，变更见 [CHANGELOG.md](CHANGELOG.md)。
 
+## 安装
+
+单机安装（自动识别架构、校验 SHA256、装到 `/usr/local/bin`，不写配置文件）：
+
+```bash
+curl -fsSL https://github.com/AronWang001/linux-cve/releases/download/v2.0.0/install.sh | sudo sh
+```
+
+指定版本或目录：
+
+```bash
+VERSION=v2.0.0 DEST=/usr/local/bin sh install.sh
+```
+
+只提供 amd64 / arm64 的预编译包；其它架构、或不想用发布包，见
+[从源码构建](#从源码构建)。旧仓库地址 `linux-cve-2026-98432-fix` 仍然 301 跳转。
+
 ## 快速开始
 
 ```bash
@@ -33,7 +50,7 @@ sudo linux-cve scan
 
 # 4. 看明细与报告
 sudo linux-cve list --vulnerable
-sudo linux-cve report --save /var/log/linux-cve/report.md
+sudo linux-cve report --out /var/log/linux-cve/report.md
 
 # 5. 预演修复（不改系统），确认后执行
 sudo linux-cve plan
