@@ -75,10 +75,37 @@ native_sign() {
 }
 
 # 4) 逐对比较
+#
+# 用例两种形态：
+#   a<TAB>b                  普通用例，比较 Go 与原生的符号
+#   !管理器<TAB>a<TAB>b      非法输入，仅在该管理器下断言 Go 报 ERR
 fail=0
 count=0
-while IFS=$'\t' read -r a b; do
-  [ -n "$a" ] || continue
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+
+  case "$line" in
+    \!*)
+      want_mgr="${line%%$'\t'*}"
+      want_mgr="${want_mgr#!}"
+      rest="${line#*$'\t'}"
+      a="${rest%%$'\t'*}"
+      b="${rest#*$'\t'}"
+      if [ "$want_mgr" != "$MANAGER" ]; then
+        continue
+      fi
+      count=$((count+1))
+      go_sign="$("$PROBE" "$MANAGER" <<< "$(printf '%s\t%s\n' "$a" "$b")" | awk '{print $1}')"
+      if [ "$go_sign" != "ERR" ]; then
+        echo "MISMATCH(非法版本应报 ERR，实际 $go_sign): $a vs $b"
+        fail=1
+      fi
+      continue
+      ;;
+  esac
+
+  a="${line%%$'\t'*}"
+  b="${line#*$'\t'}"
   a="$(printf '%s' "$a" | xargs)"
   b="$(printf '%s' "$b" | xargs)"
 
