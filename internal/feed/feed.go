@@ -96,9 +96,25 @@ type Source struct {
 	// SinceYear 限定只处理该年份及以后的文档；0 表示不裁剪。
 	SinceYear int
 
+	// Distros 是该源覆盖的发行版。覆盖判定必须按发行版过滤：
+	// 在一台 Debian 上没同步 RHEL 情报不是缺口，把它算成缺口会让
+	// 「机器干净 + 数据完整」永远拿不到 COVERED，退出码永远不是 0。
+	Distros []domain.DistroID
+
 	// Disabled 表示本期不接入该源（含原因），不得静默跳到「无漏洞」结论。
 	Disabled       bool
 	DisabledReason string
+}
+
+// AppliesTo 判断该源是否覆盖目标发行版。Distros 为空表示「与发行版无关」，
+// 一律返回 false——宁可少算覆盖，也不要让无关源把结论撑成 COVERED。
+func (s Source) AppliesTo(d domain.DistroID) bool {
+	for _, x := range s.Distros {
+		if x == d {
+			return true
+		}
+	}
+	return false
 }
 
 // Validate 校验源配置的完整性。

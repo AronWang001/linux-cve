@@ -229,6 +229,32 @@ func (d *DB) ScanFindings(ctx context.Context, scanID string,
 	return out, nil
 }
 
+// CountFindings 统计满足状态过滤的判定条数（与 ScanFindings 的过滤条件保持一致）。
+// 单独提供这个函数，是因为 list --limit 需要同时说清「显示几条」和「一共几条」：
+// 只打印显示条数会让 12 万条的结果看起来只有 3 条。
+func (d *DB) CountFindings(ctx context.Context, scanID string,
+	states []domain.VulnState) (int, error) {
+
+	q := `SELECT COUNT(*) FROM findings WHERE scan_id = ?`
+	args := []any{scanID}
+	if len(states) > 0 {
+		ph := ""
+		for i, st := range states {
+			if i > 0 {
+				ph += ","
+			}
+			ph += "?"
+			args = append(args, string(st))
+		}
+		q += " AND vuln_state IN (" + ph + ")"
+	}
+	var n int
+	if err := d.db.QueryRowContext(ctx, q, args...).Scan(&n); err != nil {
+		return 0, apperr.Wrap(exitcode.Error, "database.scan", "统计判定条数失败", err)
+	}
+	return n, nil
+}
+
 // CountByState 统计某次扫描各漏洞状态的条数。
 func (d *DB) CountByState(ctx context.Context, scanID string) (map[domain.VulnState]int, error) {
 	rows, err := d.db.QueryContext(ctx,
