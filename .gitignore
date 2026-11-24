@@ -13,3 +13,13 @@ coverage/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Go 构建产物
+/dist/
+/linux-cve
+/linux-cve.exe
+
+# 运行时数据（数据库与 WAL）
+*.db
+*.db-wal
+*.db-shm

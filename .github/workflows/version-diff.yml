@@ -1,0 +1,67 @@
+name: version-diff
+
+# 原生版本比较差分测试（阶段 2 BLOCKED 项补做）
+#
+# 在对应 Linux 容器内，用 Go 实现与原生命令对同一组版本对做符号一致性比较。
+# 仅在 CI 的 Linux 容器中运行；本地 Windows 缺容器/原生命令时该测试保持 BLOCKED。
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "internal/version/**"
+      - "tests/vercmp_probe.go"
+      - "tests/version_diff.sh"
+      - "tests/version_diff_cases.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  version-diff:
+    name: 原生差分（${{ matrix.name }}）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Debian (dpkg)
+            image: debian:12
+            manager: dpkg
+            install: "true" # dpkg 已内置
+          - name: Fedora (rpm)
+            image: fedora:latest
+            manager: rpm
+            install: "true" # rpm >= 4.16 已内置，含 rpm.vercmp lua
+          - name: Alpine (apk)
+            image: alpine:3.20
+            manager: apk
+            # alpine 镜像是 busybox ash，没有 bash；差分脚本用 bash 写，
+            # 缺 bash 时 runner 直接报 "bash: not found"，不是测试失败而是环境缺失。
+            install: "apk add --no-cache bash"
+          - name: Arch (pacman)
+            image: archlinux:latest
+            manager: pacman
+            install: "pacman -Sy --noconfirm pacman >/dev/null 2>&1 || true"
+
+    container:
+      image: ${{ matrix.image }}
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 准备原生命令
+        # 这一步此前缺失：矩阵里声明的 install 从未被执行，
+        # Alpine 因此一直没有 bash，差分脚本连入口都跑不到。
+        run: ${{ matrix.install }}
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.4"
+
+      - name: 运行差分测试
+        run: |
+          bash tests/version_diff.sh "${{ matrix.manager }}"
