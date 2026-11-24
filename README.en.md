@@ -116,19 +116,23 @@ Full flags, output samples and exit codes: [docs/cli.md](docs/cli.md) (Chinese).
 
 | Distribution | Release | Detection | Auto-fix |
 | --- | --- | --- | --- |
-| Debian | 13 trixie | ✅ machine-verified | ✅ machine-verified |
+| Debian | 13 trixie | ✅ host + container | ✅ host-verified |
 | Debian | 12 bookworm | 🟡 | ✅ enabled |
 | Debian | 11 bullseye | 🟡 (EOL) | ❌ |
-| Ubuntu | 22.04 / 24.04 | 🟡 | ❌ (ESM out of scope) |
-| Alpine | 3.19 / 3.20 / 3.21 | 🟡 | ❌ (all EOL) |
+| Ubuntu | 24.04 noble | ✅ container | ❌ (ESM out of scope) |
+| Ubuntu | 22.04 jammy | 🟡 | ❌ (ESM out of scope) |
+| Alpine | 3.20 | ✅ container | ❌ (EOL) |
+| Alpine | 3.19 / 3.21 | 🟡 | ❌ (all EOL) |
 | Arch | rolling | 🟡 | ❌ (no fixed-version semantics) |
 | RHEL | 8 / 9 / 10 | 🟡 | ❌ |
 | SLES | 15.6 / 16.0 | 🟡 | ❌ |
 | openSUSE Leap | 15.6 / 16.0 | 🟡 | ❌ |
 
-`✅` means "actually run on that distribution"; `🟡` means the parser and data are
-verified against real vendor publications but the tool has not been run on such a
-host yet. Unregistered releases are always `UNKNOWN` — there is no "closest
+`✅ host` means a real standalone machine; `✅ container` means the same binary
+run inside the official image with a real feed sync and a real scan (CI reruns it
+on every commit) — real but sharing the host kernel, so not a bare-metal claim.
+`🟡` means the parser and data are verified against real vendor publications but
+the tool has not been run on that distribution yet. Unregistered releases are always `UNKNOWN` — there is no "closest
 match" fallback. Lifecycle dates: [docs/support-matrix.md](docs/support-matrix.md).
 
 ## Build from source

@@ -103,17 +103,21 @@ A 级源的签名指纹固化在代码里（`internal/feed/registry.go`），换
 
 | 发行版 | 版本 | 检测 | 自动修复 |
 | --- | --- | --- | --- |
-| Debian | 13 trixie | ✅ 实机验证 | ✅ 实机验证 |
-| Debian | 12 bookworm | ✅ | ✅ 开放（待实机验收） |
-| Debian | 11 bullseye | ✅（已 EOL） | ❌ 生命周期结束 |
-| Ubuntu | 22.04 / 24.04 | ✅ | ❌（ESM 不在覆盖范围） |
-| Alpine | 3.19 / 3.20 / 3.21 | ✅ | ❌（均已 EOL） |
+| Debian | 13 trixie | ✅ 实机 + 容器 | ✅ 实机验证 |
+| Debian | 12 bookworm | 🟡 数据就绪 | ✅ 开放 |
+| Debian | 11 bullseye | 🟡（已 EOL） | ❌ 生命周期结束 |
+| Ubuntu | 24.04 noble | ✅ 容器验证 | ❌（ESM 不在覆盖范围） |
+| Ubuntu | 22.04 jammy | 🟡 | ❌（ESM 不在覆盖范围） |
+| Alpine | 3.20 | ✅ 容器验证 | ❌（已 EOL） |
+| Alpine | 3.19 / 3.21 | 🟡 | ❌（均已 EOL） |
 | Arch | rolling | ✅ | ❌（无固定版本语义，`pacman` 无可靠预演） |
 | RHEL | 8 / 9 / 10 | ✅ | ❌ |
 | SLES | 15.6 / 16.0 | ✅ | ❌ |
 | openSUSE Leap | 15.6 / 16.0 | ✅ | ❌ |
 
-未登记的 release 一律按 `UNKNOWN` 处理，不按「最新的那个」兜底。完整生命周期日期见
+「容器验证」= 在官方镜像内运行同一个二进制、真实同步官方情报后真实扫描，
+CI 每次提交都重跑；它不等于裸机验收（共用宿主内核）。未登记的 release 一律按
+`UNKNOWN` 处理，不按「最新的那个」兜底。完整生命周期日期见
 [docs/support-matrix.md](docs/support-matrix.md)。
 
 ## 从源码构建
