@@ -156,9 +156,9 @@ func (e *env) printHelp(w io.Writer) {
   scan              扫描本机漏洞
   list              列出扫描结果
   show <CVE>        查看单个 CVE 详情与判定依据
-  plan [CVE...]     生成修复计划（不执行）
-  fix  [CVE...]     执行修复并复检
-  report            输出 TXT / JSON 报告
+  plan              生成修复计划（不执行）
+  fix               执行修复并复检
+  report            输出 Markdown 报告（--out 存文件）
   feed update       更新漏洞情报库
   feed status       查看各情报源状态
   support           打印支持矩阵
@@ -175,7 +175,7 @@ func (e *env) printHelp(w io.Writer) {
   --offline             仅使用本地缓存情报
 
 退出码:
-  0 成功  2 参数错误  3 发现漏洞  4 不支持  5 权限不足
+  0 成功  1 运行时错误  2 参数错误  3 发现漏洞  4 不支持  5 权限不足
   6 修复失败  7 完整性校验失败  8 未实现  9 覆盖不足  130 中断
 `)
 }
@@ -190,9 +190,13 @@ func (e *env) printCommandHelp(w io.Writer, cmd string) {
 	case "inventory":
 		fmt.Fprint(w, "用法: linux-cve inventory [--json] [--save]\n\n  采集本机资产（软件包、内核、发行版）。\n  --json   以 JSON 输出采集结果\n  --save   将采集结果持久化到数据库\n")
 	case "feed":
-		fmt.Fprint(w, "用法: linux-cve feed update [源...] | linux-cve feed status [--json]\n\n"+
+		fmt.Fprint(w, "用法: linux-cve feed update [源...] [--all] [--since 年份] [--release R] [--json]\n"+
+			"      linux-cve feed status [--json]\n\n"+
 			"  更新漏洞情报库 / 查看各情报源状态。\n"+
-			"  不带源名时更新全部已接入的源；源名见 feed status 的 ID 列。\n")
+			"  不带源名时更新全部已接入的源；源名见 feed status 的 ID 列。\n"+
+			"  --all            更新全部已实现解析器的源\n"+
+			"  --since <年份>   只同步该年及以后发布的公告（仅 CSAF 源有效）\n"+
+			"  --release <R>    只同步指定 release（Ubuntu 用 codename，Alpine 用 3.20）\n")
 	case "support":
 		fmt.Fprint(w, "用法: linux-cve support [--json]\n\n  打印发行版支持矩阵与自动修复许可。\n")
 	case "scan":
@@ -206,15 +210,21 @@ func (e *env) printCommandHelp(w io.Writer, cmd string) {
 	case "show":
 		fmt.Fprint(w, "用法: linux-cve show <CVE-ID> [--json]\n\n  查看单个 CVE 的判定依据。\n")
 	case "report":
-		fmt.Fprint(w, "用法: linux-cve report [--json] [--save <路径>]\n\n"+
-			"  输出最近一次扫描的报告（默认 Markdown）。\n")
+		fmt.Fprint(w, "用法: linux-cve report [--out <路径>]\n\n"+
+			"  输出最近一次扫描的 Markdown 报告。\n"+
+			"  --out <路径>  写入文件（默认输出到标准输出）\n")
 	case "plan":
-		fmt.Fprint(w, "用法: linux-cve plan [--json]\n\n"+
-			"  基于最近一次扫描生成修复计划（只预演，不改系统）。\n")
+		fmt.Fprint(w, "用法: linux-cve plan [--package 包名] [--json]\n\n"+
+			"  基于最近一次扫描生成修复计划（只预演，不改系统）。\n"+
+			"  --package <包名>  只处理指定包（逗号分隔，可重复）\n")
 	case "fix":
-		fmt.Fprint(w, "用法: linux-cve fix [--yes] [--json]\n\n"+
+		fmt.Fprint(w, "用法: linux-cve fix [--yes] [--dry-run] [--package 包名] [--json]\n\n"+
 			"  执行修复计划并复检。\n"+
-			"  不带 --yes 时等同于 plan，绝不因为漏写参数就动系统。\n")
+			"  --yes       确认执行\n"+
+			"  --dry-run   只预演，不执行\n"+
+			"  --package   只处理指定包（逗号分隔，可重复）\n"+
+			"  不带 --yes 时等同于 plan，绝不因为漏写参数就动系统。\n"+
+			"  需要配置 remediation.allow_auto_fix = true，否则开关会拦下执行。\n")
 	default:
 		fmt.Fprintf(w, "未知命令: %s\n", cmd)
 		e.printHelp(w)
