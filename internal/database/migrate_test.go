@@ -68,19 +68,24 @@ func TestMigrateFreshDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("首次迁移失败: %v", err)
 	}
-	if n != 2 {
-		t.Errorf("首次应应用 2 个迁移，实际 %d", n)
+	want := wantMigrationCount(t)
+	if n != want {
+		t.Errorf("首次应应用 %d 个迁移，实际 %d", want, n)
 	}
 
 	st, err := d.Status(ctx)
 	if err != nil {
 		t.Fatalf("读取状态失败: %v", err)
 	}
-	if st.SchemaVersion != 2 {
-		t.Errorf("schema 版本应为 2，实际 %d", st.SchemaVersion)
+	if st.SchemaVersion != want {
+		t.Errorf("schema 版本应为 %d，实际 %d", want, st.SchemaVersion)
 	}
-	if len(st.Applied) != 2 || st.Applied[0].Name != "init" || st.Applied[1].Name != "inventory" {
-		t.Errorf("已应用记录不符: %+v", st.Applied)
+	if len(st.Applied) != want {
+		t.Errorf("已应用记录数应为 %d，实际 %d", want, len(st.Applied))
+	}
+	// 前两个迁移的语义不回退：0001 建骨架，0002 建资产采集。
+	if len(st.Applied) >= 2 && (st.Applied[0].Name != "init" || st.Applied[1].Name != "inventory") {
+		t.Errorf("前两个迁移名称不符: %+v", st.Applied[:2])
 	}
 	if len(st.Pending) != 0 {
 		t.Errorf("不应存在待应用迁移，实际 %+v", st.Pending)
@@ -153,9 +158,22 @@ func TestSeedData(t *testing.T) {
 		`SELECT MAX(version) FROM schema_migrations`).Scan(&maxVer); err != nil {
 		t.Fatalf("读取 schema_migrations 失败: %v", err)
 	}
-	if maxVer != 2 {
-		t.Errorf("schema_migrations 最大版本应为 2，实际 %d", maxVer)
+	if maxVer != wantMigrationCount(t) {
+		t.Errorf("schema_migrations 最大版本应为 %d，实际 %d", wantMigrationCount(t), maxVer)
 	}
+}
+
+// wantMigrationCount 返回内嵌迁移总数。
+//
+// 断言写成动态值而不是硬编码数字：新增迁移不应需要改测试，
+// 但「全部迁移都应用了」这件事必须继续被验证。
+func wantMigrationCount(t *testing.T) int {
+	t.Helper()
+	ms, err := LoadMigrations()
+	if err != nil {
+		t.Fatalf("读取内嵌迁移失败: %v", err)
+	}
+	return len(ms)
 }
 
 // seedAdvisory 插入一条公告，供修复版本相关测试使用。

@@ -1,0 +1,178 @@
+package database
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"time"
+
+	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
+	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
+)
+
+// FeedSourceRow 是 feed_sources 的一行配置。
+// 配置的唯一来源是 internal/feed/registry.go，本包只负责落库。
+type FeedSourceRow struct {
+	ID            domain.SourceID
+	Name          string
+	Kind          string
+	URL           string
+	TrustLevel    domain.TrustLevel
+	SignatureKind string
+}
+
+// SourceStatus 是 feed status 命令需要的单源状态。
+type SourceStatus struct {
+	ID            domain.SourceID
+	Name          string
+	Kind          string
+	URL           string
+	TrustLevel    domain.TrustLevel
+	SignatureKind string
+
+	// Status: ok | stale | error | unknown
+	Status string
+	// SignatureStatus / IntegrityStatus 是最近一次实际校验结果，不是应然等级。
+	SignatureStatus domain.SignatureStatus
+	IntegrityStatus domain.IntegrityStatus
+
+	LastCheckedAt *time.Time
+	LastSuccessAt *time.Time
+	LastError     string
+
+	// 当前生效快照
+	ActiveSnapshot   string
+	SnapshotAt       *time.Time
+	Advisories       int
+	Fixes            int
+	NotAffected      int
+	ParserVersion    string
+	ArtifactCount    int
+	// Age 由调用方按当前时间计算；这里只给出快照完成时间。
+}
+
+// UpsertFeedSources 写入或更新源配置。已存在时只更新名称/URL/信任等级等元信息，
+// 不动最近一次同步状态（status/last_success_at），避免把运行态覆盖成初始值。
+func (d *DB) UpsertFeedSources(ctx context.Context, rows []FeedSourceRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return apperr.Wrap(exitcode.Error, "database.feed", "开启源配置事务失败", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.PrepareContext(ctx, `
+INSERT INTO feed_sources (id, name, kind, url, trust_level, signature_kind, scope,
+                          signature_status, integrity_status, status)
+VALUES (?, ?, ?, ?, ?, ?, 'advisory', 'unverified', 'unchecked', 'unknown')
+ON CONFLICT(id) DO UPDATE SET
+    name = excluded.name,
+    kind = excluded.kind,
+    url = excluded.url,
+    trust_level = excluded.trust_level,
+    signature_kind = excluded.signature_kind`)
+	if err != nil {
+		return apperr.Wrap(exitcode.Error, "database.feed", "准备源配置语句失败", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	for _, r := range rows {
+		if _, err := stmt.ExecContext(ctx, string(r.ID), r.Name, r.Kind, r.URL,
+			string(r.TrustLevel), r.SignatureKind); err != nil {
+			return apperr.Wrap(exitcode.Error, "database.feed",
+				fmt.Sprintf("写入情报源 %s 失败", r.ID), err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return apperr.Wrap(exitcode.Error, "database.feed", "提交源配置失败", err)
+	}
+	return nil
+}
+
+// FeedStatus 返回所有情报源的当前状态，含当前生效快照的统计。
+func (d *DB) FeedStatus(ctx context.Context) ([]SourceStatus, error) {
+	rows, err := d.db.QueryContext(ctx, `
+SELECT s.id, s.name, s.kind, s.url, s.trust_level, s.signature_kind,
+       s.status, s.signature_status, s.integrity_status,
+       s.last_checked_at, s.last_success_at, COALESCE(s.last_error, ''),
+       COALESCE(p.id, ''), p.completed_at,
+       COALESCE(p.advisories, 0), COALESCE(p.fixes, 0), COALESCE(p.not_affected, 0),
+       COALESCE(p.parser_version, ''),
+       (SELECT COUNT(*) FROM feed_snapshot_artifacts a WHERE a.snapshot_id = p.id)
+FROM feed_sources s
+LEFT JOIN feed_snapshots p ON p.source_id = s.id AND p.is_active = 1
+ORDER BY s.id`)
+	if err != nil {
+		return nil, apperr.Wrap(exitcode.Error, "database.feed", "查询情报源状态失败", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []SourceStatus
+	for rows.Next() {
+		var st SourceStatus
+		var trust, sig, status, lastChecked, lastSuccess, completed sql.NullString
+		var sigStatus, integStatus string
+		if err := rows.Scan(&st.ID, &st.Name, &st.Kind, &st.URL, &trust, &sig,
+			&status, &sigStatus, &integStatus,
+			&lastChecked, &lastSuccess, &st.LastError,
+			&st.ActiveSnapshot, &completed,
+			&st.Advisories, &st.Fixes, &st.NotAffected,
+			&st.ParserVersion, &st.ArtifactCount); err != nil {
+			return nil, apperr.Wrap(exitcode.Error, "database.feed", "解析情报源状态失败", err)
+		}
+		st.TrustLevel = domain.TrustLevel(trust.String)
+		st.SignatureKind = sig.String
+		st.Status = status.String
+		st.SignatureStatus = domain.SignatureStatus(sigStatus)
+		st.IntegrityStatus = domain.IntegrityStatus(integStatus)
+		st.LastCheckedAt = parseTimePtr(lastChecked)
+		st.LastSuccessAt = parseTimePtr(lastSuccess)
+		st.SnapshotAt = parseTimePtr(completed)
+		out = append(out, st)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperr.Wrap(exitcode.Error, "database.feed", "遍历情报源状态失败", err)
+	}
+	return out, nil
+}
+
+// ActiveSnapshot 返回某源当前生效的快照 ID；无生效快照时返回空串。
+func (d *DB) ActiveSnapshot(ctx context.Context, sourceID domain.SourceID) (string, error) {
+	var id string
+	err := d.db.QueryRowContext(ctx,
+		`SELECT id FROM feed_snapshots WHERE source_id = ? AND is_active = 1`,
+		string(sourceID)).Scan(&id)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", apperr.Wrap(exitcode.Error, "database.feed", "查询生效快照失败", err)
+	}
+	return id, nil
+}
+
+// SetMeta 写入或更新 app_meta 键值。
+func (d *DB) SetMeta(ctx context.Context, key, value string) error {
+	_, err := d.db.ExecContext(ctx,
+		`INSERT INTO app_meta (key, value) VALUES (?, ?)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
+	if err != nil {
+		return apperr.Wrap(exitcode.Error, "database.meta", "写入元信息失败", err)
+	}
+	return nil
+}
+
+// parseTimePtr 解析 RFC3339 文本为时间指针，空值返回 nil。
+func parseTimePtr(s sql.NullString) *time.Time {
+	if !s.Valid || s.String == "" {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, s.String)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
