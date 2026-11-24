@@ -35,6 +35,7 @@ jobs:
             install.sh \
             lib/*.sh \
             adapters/*.sh \
+            packaging/*.sh \
             tests/*.sh \
             tests/lib/*.sh
 
