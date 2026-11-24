@@ -208,8 +208,13 @@ func (e *env) printCommandHelp(w io.Writer, cmd string) {
 	case "report":
 		fmt.Fprint(w, "用法: linux-cve report [--json] [--save <路径>]\n\n"+
 			"  输出最近一次扫描的报告（默认 Markdown）。\n")
-	case "plan", "fix":
-		fmt.Fprintf(w, "%s 尚未实现（%s）。\n", cmd, phaseOf(cmd))
+	case "plan":
+		fmt.Fprint(w, "用法: linux-cve plan [--json]\n\n"+
+			"  基于最近一次扫描生成修复计划（只预演，不改系统）。\n")
+	case "fix":
+		fmt.Fprint(w, "用法: linux-cve fix [--yes] [--json]\n\n"+
+			"  执行修复计划并复检。\n"+
+			"  不带 --yes 时等同于 plan，绝不因为漏写参数就动系统。\n")
 	default:
 		fmt.Fprintf(w, "未知命令: %s\n", cmd)
 		e.printHelp(w)

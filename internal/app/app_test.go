@@ -74,21 +74,15 @@ func TestVersionJSON(t *testing.T) {
 	}
 }
 
-// TestUnimplementedCommands 未实现的子命令必须明确失败，不能静默成功。
+// TestNoCommandRemainsUnimplemented 阶段 5 之后不再有「已注册但未实现」的命令。
 //
-// 名单随阶段推进收缩：scan/list/show/report/feed/support 已实现，
-// 只剩 plan 与 fix 仍处于「已注册但未实现」。
-func TestUnimplementedCommands(t *testing.T) {
+// 用「退出码不是 8」判断，而不是断言具体输出：plan/fix 的内容依赖
+// 本机扫描结果，断言细节会让这条用例随环境漂移。
+func TestNoCommandRemainsUnimplemented(t *testing.T) {
 	for _, cmd := range []string{"plan", "fix"} {
-		code, out, errOut := runCLI(t, cmd)
-		if code != exitcode.NotImplemented {
-			t.Errorf("%s 退出码应为 8，实际 %d", cmd, code)
-		}
-		if out != "" {
-			t.Errorf("%s 不应向 stdout 输出内容，实际 %q", cmd, out)
-		}
-		if !strings.Contains(errOut, "尚未实现") {
-			t.Errorf("%s 应说明未实现，实际 %q", cmd, errOut)
+		code, _, errOut := runCLI(t, cmd)
+		if code == exitcode.NotImplemented {
+			t.Errorf("%s 仍返回未实现：%s", cmd, errOut)
 		}
 	}
 }
