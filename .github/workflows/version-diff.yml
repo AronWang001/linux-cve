@@ -52,6 +52,11 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
+      - name: 准备原生命令
+        # 这一步此前缺失：矩阵里声明的 install 从未被执行，
+        # Alpine 因此一直没有 bash，差分脚本连入口都跑不到。
+        run: ${{ matrix.install }}
+
       - name: 安装 Go
         uses: actions/setup-go@v5
         with:
