@@ -115,9 +115,10 @@ func (e *env) run(ctx context.Context, args []string) (exitcode.Code, error) {
 		return e.runShow(ctx, cmdArgs)
 	case "report":
 		return e.runReport(ctx, cmdArgs)
-	case "plan", "fix":
-		// 已注册但未实现：明确失败，不静默返回成功
-		return exitcode.NotImplemented, apperr.NotImplementedf("%s 尚未实现（%s）", cmd, phaseOf(cmd))
+	case "plan":
+		return e.runPlan(ctx, cmdArgs)
+	case "fix":
+		return e.runFix(ctx, cmdArgs)
 	default:
 		return exitcode.Usage, apperr.Usagef("未知子命令: %s（运行 linux-cve help 查看用法）", cmd)
 	}
