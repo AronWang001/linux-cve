@@ -181,6 +181,42 @@ ORDER BY fetched_at DESC LIMIT 1`, string(sourceID)).Scan(
 	return a, true, nil
 }
 
+// ArtifactByURL 按 (source_id, download_url) 查最近一次落库的 Artifact。
+//
+// 按文档发布的源（CSAF）用它判断「这份文档本地有没有、什么时候抓的」：
+// 清单时间戳不比 fetched_at 新就直接复用本地字节，避免几万次无意义下载。
+// 同一 URL 可能对应多个历史版本（内容变过），取最新一条。
+func (d *DB) ArtifactByURL(ctx context.Context, sourceID domain.SourceID,
+	url string) (ArtifactRow, bool, error) {
+
+	row := d.db.QueryRowContext(ctx, `
+SELECT sha256, source_id, size_bytes, download_url, fetched_at,
+       signature_status, integrity_status, stored_path, etag, last_modified
+FROM feed_artifacts
+WHERE source_id = ? AND download_url = ?
+ORDER BY fetched_at DESC
+LIMIT 1`, string(sourceID), url)
+
+	var a ArtifactRow
+	var fetched, src, sig, integ string
+	err := row.Scan(&a.SHA256, &src, &a.SizeBytes, &a.DownloadURL, &fetched,
+		&sig, &integ, &a.StoredPath, &a.ETag, &a.LastModified)
+	if err == sql.ErrNoRows {
+		return ArtifactRow{}, false, nil
+	}
+	if err != nil {
+		return ArtifactRow{}, false, apperr.Wrap(exitcode.Error, "database.artifact",
+			"查询 Artifact 失败", err)
+	}
+	a.SourceID = domain.SourceID(src)
+	if t, perr := time.Parse(time.RFC3339, fetched); perr == nil {
+		a.FetchedAt = t
+	}
+	a.SignatureStatus = domain.SignatureStatus(sig)
+	a.IntegrityStatus = domain.IntegrityStatus(integ)
+	return a, true, nil
+}
+
 // SetMeta 写入或更新 app_meta 键值。
 func (d *DB) SetMeta(ctx context.Context, key, value string) error {
 	_, err := d.db.ExecContext(ctx,

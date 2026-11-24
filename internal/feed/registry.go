@@ -33,6 +33,24 @@ const (
 	// URLSUSEPublicKey 是 SUSE 官方目录内声明的公钥文件（无 provider-metadata.json）。
 	URLSUSEPublicKey = "https://ftp.suse.com/pub/projects/security/keys/security-automation.asc"
 
+	// FingerprintSUSE 是 security-automation.asc 的主密钥指纹。
+	// 2026-11-24 用该公钥实际校验 opensuse-su-2026_21889-1.json.asc 通过后固化。
+	// SUSE 不提供 provider-metadata.json，指纹只能如此确定；
+	// 换钥时必须同步修改这里，否则所有文档会以「指纹不符」失败——这是预期行为。
+	FingerprintSUSE = "6B62473BD771517D41E684DFD4439E7EC133994D"
+
+	// URLRedHatCSAFFeed 按文档发布的公告目录（每份 RHSA 一个 JSON + .asc）。
+	//
+	// 为什么不用 vex：实测单份 VEX 文档 16.8MB（把全部产品线塞进 product_tree），
+	// 共 78,041 份，既下载不动也存不下；而扫描需要的「修复版本」事实
+	// 恰好来自 RHSA，VEX 的价值（known_not_affected）在 RHSA 里同样有。
+	URLRedHatCSAFFeed  = URLRedHatCSAFBase + "/advisories"
+	URLRedHatCSAFIndex = URLRedHatCSAFFeed + "/changes.csv"
+	URLRedHatCSAFKey   = "https://security.access.redhat.com/data/97f5eac4.txt"
+
+	// URLSUSECSAFIndex 是 SUSE 的变更清单。
+	URLSUSECSAFIndex = URLSUSECSAFBase + "/changes.csv"
+
 	// URLAlpineSecDBTemplate 按 release 与仓库分文件：v3.20/main.json。
 	//
 	// 模板含两个占位符，顺序固定为 release、仓库，由 Source.URLForRepo 展开。
@@ -107,9 +125,12 @@ func Sources() []Source {
 		},
 		{
 			ID:            domain.SourceRHELCSAF,
-			Name:          "Red Hat CSAF/VEX",
+			Name:          "Red Hat CSAF",
 			Kind:          "csaf",
-			URL:           URLRedHatCSAFBase,
+			URL:           URLRedHatCSAFFeed,
+			IndexURL:      URLRedHatCSAFIndex,
+			KeyURL:        URLRedHatCSAFKey,
+			DocumentSet:   true,
 			TrustLevel:    domain.TrustLevelA,
 			SignatureKind: "gpg",
 			PublicKeyFP:   FingerprintRedHat,
@@ -118,18 +139,32 @@ func Sources() []Source {
 		},
 		{
 			ID:            domain.SourceSUSECSAF,
-			Name:          "SUSE CSAF/VEX",
+			Name:          "SUSE CSAF",
 			Kind:          "csaf",
 			URL:           URLSUSECSAFBase,
+			IndexURL:      URLSUSECSAFIndex,
+			KeyURL:        URLSUSEPublicKey,
+			DocumentSet:   true,
 			TrustLevel:    domain.TrustLevelA,
 			SignatureKind: "gpg",
+			PublicKeyFP:   FingerprintSUSE,
 			ParserVersion: ParserVersionSUSE,
 			MaxBytes:      DefaultMaxBytes,
-			// SUSE 未提供 provider-metadata.json，指纹在实现签名校验时
-			// 从 security-automation.asc 现场计算并与此处比对后固化。
-			PublicKeyFP: "pending-fingerprint-confirmation",
 		},
 	}
+}
+
+// ParserReason 按源 ID 判断解析器是否就绪，返回为空表示就绪。
+//
+// feed status 只需要「能不能解析」，不需要解析器实例；
+// 单独提供这个入口，避免调用方为了一个判断去关心两种解析器接口。
+func ParserReason(id domain.SourceID) (Source, string) {
+	src, ok := SourceByID(id)
+	if !ok {
+		return Source{}, "未知情报源"
+	}
+	_, reason := ParserReady(src)
+	return src, reason
 }
 
 // SourceByID 按 ID 查找源配置。
