@@ -4,8 +4,9 @@
 | --- | --- |
 | 版本 | **v2.0.0（Stable）** |
 | 发布日期 | 2026-11-24 |
+| 仓库 | `AronWang001/linux-cve`（2026-11-24 由 `linux-cve-2026-98432-fix` 更名，旧地址 301 跳转） |
 | 发布地址 | https://github.com/AronWang001/linux-cve/releases/tag/v2.0.0 |
-| 标签 | `v2.0.0` → `main` @ `ab80e24` |
+| 标签 | `v2.0.0` → `main` @ `1d4021c` |
 | 合并方式 | PR #5（`feat/v2.0.0` → `main`），merge commit `4a41961` |
 | 发布物 | `linux-cve_2.0.0_linux_amd64.tar.gz`（5.76MB）、`linux-cve_2.0.0_linux_arm64.tar.gz`（5.22MB）、`SHA256SUMS`、`install.sh` |
 | 发布形态 | Draft: false，Prerelease: false |
