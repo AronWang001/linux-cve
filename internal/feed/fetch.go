@@ -38,16 +38,16 @@ type FetchOptions struct {
 // FetchResult 是一次成功抓取的结果。
 type FetchResult struct {
 	// Body 仅在 NotModified 为 false 时有内容。
-	Body        []byte
-	SHA256      string
-	Size        int64
-	StatusCode  int
-	NotModified bool
-	ETag        string
+	Body         []byte
+	SHA256       string
+	Size         int64
+	StatusCode   int
+	NotModified  bool
+	ETag         string
 	LastModified string
-	ContentType string
-	FetchedAt   time.Time
-	Retries     int
+	ContentType  string
+	FetchedAt    time.Time
+	Retries      int
 	// Elapsed 是含重试在内的总耗时，进报告用于说明数据源响应情况。
 	Elapsed time.Duration
 }

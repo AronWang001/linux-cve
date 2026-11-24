@@ -55,6 +55,11 @@ type ParseResult struct {
 	Skipped  int
 	Warnings []string
 
+	// BridgeFailed 是「记录本身有效，但引用链解析不出来」的条数。
+	// 它不进 Skipped：这类记录仍然会以公告形式入库，只是缺少包级细节，
+	// 报告需要据此说明覆盖不完整，而不是声称「没有漏洞」。
+	BridgeFailed int
+
 	Guard GuardStats
 }
 
@@ -80,8 +85,14 @@ type Parser interface {
 // 零条记录会被上游误读成「这个发行版没有漏洞」。
 func ParserFor(id domain.SourceID) (Parser, string) {
 	switch id {
+	case domain.SourceAlpineSecDB:
+		return AlpineParser{}, ""
+	case domain.SourceArchTracker:
+		return ArchParser{}, ""
 	case domain.SourceDebianTracker:
 		return DebianParser{}, ""
+	case domain.SourceUbuntuOVAL:
+		return UbuntuParser{}, ""
 	default:
 		return nil, "该情报源的解析器尚未实现"
 	}

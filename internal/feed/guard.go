@@ -111,12 +111,22 @@ type GuardStats struct {
 	Skipped      int
 }
 
+// minErrorSample 是应用比例阈值的样本量下限。
+//
+// 样本太小时比例没有统计意义：4 条里 1 条异常就是 25%，但那是脏数据，
+// 不是格式漂移。低于该值时只拦「过半异常」，避免正常的小规模源被误杀
+// （例如只有几十条记录的情报源）。
+const minErrorSample = 100
+
 // maxErrorRate 计算异常记录比例是否超阈值。
 // 超阈值意味着「格式变了」而不是「个别脏数据」，必须整批拒绝，
 // 否则会把残缺情报写进库，导致漏判。
 func maxErrorRate(skipped, total int) bool {
 	if total <= 0 {
 		return false
+	}
+	if total < minErrorSample {
+		return skipped*2 > total
 	}
 	return float64(skipped)/float64(total) > DefaultMaxErrorRate
 }
