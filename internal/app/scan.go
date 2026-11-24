@@ -153,6 +153,11 @@ func (e *env) coverageOf(ctx context.Context, d *database.DB,
 
 	out := make([]feed.Coverage, 0, len(rows))
 	for _, r := range rows {
+		src, known := feed.SourceByID(r.ID)
+		if known && !src.AppliesTo(inv.DistroID) {
+			// 与目标发行版无关的源不参与覆盖判定。
+			continue
+		}
 		c := feed.Coverage{SourceID: r.ID, State: feed.CoverageUnknown}
 		switch {
 		case r.LastSuccessAt == nil:
@@ -169,9 +174,13 @@ func (e *env) coverageOf(ctx context.Context, d *database.DB,
 			c.LastSyncAt = *r.LastSuccessAt
 			c.Age = now.Sub(*r.LastSuccessAt)
 		}
-		if _, reason := feed.ParserFor(r.ID); reason != "" {
-			c.State = feed.CoverageUnknown
-			c.Reason = "解析器未实现，本期不提供该源数据"
+		// 必须用 ParserReady 而不是 ParserFor：CSAF 源按文档发布，
+		// 用单文件解析器表去判断会把已经接入的 RHEL/SUSE 误报成「未实现」。
+		if known {
+			if _, reason := feed.ParserReady(src); reason != "" {
+				c.State = feed.CoverageUnknown
+				c.Reason = "解析器未就绪：" + reason
+			}
 		}
 		out = append(out, c)
 	}
@@ -195,8 +204,10 @@ func aggregateCoverage(cov []feed.Coverage) (string, string) {
 		}
 	}
 	switch {
+	case len(cov) == 0:
+		return feed.CoverageUnknown, "没有与该发行版对应的情报源，本次结论不可作为安全依据"
 	case covered > 0 && partial == 0 && len(notes) == 0:
-		return feed.CoverageCovered, "全部情报源均可用且未过期"
+		return feed.CoverageCovered, "该发行版所需的全部情报源均可用且未过期"
 	case covered == 0 && partial == 0:
 		return feed.CoverageUnknown, "没有任何可用的情报源：" + strings.Join(notes, "；")
 	default:
@@ -347,7 +358,19 @@ func (e *env) runList(ctx context.Context, args []string) (exitcode.Code, error)
 		fmt.Fprintln(e.stdout, "没有匹配的判定结果。")
 		return exitcode.OK, nil
 	}
-	fmt.Fprintf(e.stdout, "扫描 %s（%s %s）共 %d 条：\n\n", scan.ID, scan.DistroID, scan.Release, len(rows))
+	total := len(rows)
+	if limit > 0 {
+		// --limit 只影响「显示」，不能改变「一共多少」这个事实。
+		if n, err := d.CountFindings(ctx, scan.ID, states); err == nil {
+			total = n
+		}
+	}
+	if total > len(rows) {
+		fmt.Fprintf(e.stdout, "扫描 %s（%s %s）共 %d 条，显示前 %d 条（--limit）：\n\n",
+			scan.ID, scan.DistroID, scan.Release, total, len(rows))
+	} else {
+		fmt.Fprintf(e.stdout, "扫描 %s（%s %s）共 %d 条：\n\n", scan.ID, scan.DistroID, scan.Release, total)
+	}
 	fmt.Fprintf(e.stdout, "%-8s %-16s %-20s %-22s %-22s %-16s\n",
 		"严重度", "包", "CVE", "本机版本", "修复版本", "结论")
 	for _, f := range rows {

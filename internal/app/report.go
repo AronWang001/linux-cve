@@ -61,9 +61,17 @@ func renderReport(scan database.ScanRow, rows []database.FindingRow,
 			last = s.LastSuccessAt.UTC().Format("2006-01-02 15:04")
 		}
 		note := ""
-		if _, reason := feed.ParserFor(s.ID); reason != "" {
-			note = "解析器未实现，本期不提供数据"
-		} else if s.LastError != "" {
+		src, known := feed.SourceByID(s.ID)
+		switch {
+		case known && !src.AppliesTo(domain.DistroID(scan.DistroID)):
+			note = "与目标发行版无关，不参与覆盖判定"
+		case known:
+			if _, reason := feed.ParserReady(src); reason != "" {
+				note = "解析器未就绪：" + reason
+			} else if s.LastError != "" {
+				note = "最近错误：" + truncateText(s.LastError, 60)
+			}
+		case s.LastError != "":
 			note = "最近错误：" + truncateText(s.LastError, 60)
 		}
 		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n",
