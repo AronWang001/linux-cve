@@ -89,11 +89,6 @@ func (u *Updater) UpdateSource(ctx context.Context, src Source, release string) 
 	if src.TrustLevel == domain.TrustLevelA && u.Verifier == nil {
 		return nil, fmt.Errorf("feed: %s 是 A 级签名源，但未配置签名校验器，拒绝写入未经签名的数据", src.ID)
 	}
-	parser, reason := ParserFor(src.ID)
-	if parser == nil {
-		return nil, fmt.Errorf("feed: 无法更新 %s：%s", src.ID, reason)
-	}
-
 	lock, err := u.Store.acquireLock(string(src.ID))
 	if err != nil {
 		return nil, err
@@ -103,6 +98,18 @@ func (u *Updater) UpdateSource(ctx context.Context, src Source, release string) 
 	prev, hasPrev, err := u.DB.LastArtifact(ctx, src.ID)
 	if err != nil {
 		return nil, err
+	}
+
+	// 按文档发布的源（CSAF）走独立编排。
+	// 「抓一个 URL、解析一份文件」的假设在这里不成立：
+	// 一个源是几万份文档，需要索引 + 逐份复用 + 合并提交。
+	if src.DocumentSet {
+		return u.updateDocumentSet(ctx, src, release, prev, hasPrev)
+	}
+
+	parser, reason := ParserFor(src.ID)
+	if parser == nil {
+		return nil, fmt.Errorf("feed: 无法更新 %s：%s", src.ID, reason)
 	}
 
 	// 按 release 分文件的源，一次更新可能对应多份文件（Alpine 的 main+community）。

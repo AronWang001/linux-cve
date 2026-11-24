@@ -56,6 +56,22 @@ var matrix = []Entry{
 	{Distro: domain.DistroAlpine, Version: "3.21", EOLDate: date(2026, 11, 1),
 		Note: "secdb 覆盖，未收录不等于不受影响"},
 
+	// RHEL：日期取自 Red Hat 生命周期公告（full support 结束日）。
+	// 不登记次版本（9.4、9.5…）：它们共用同一条支持线，
+	// 按次版本登记会让 9.4 的机器在 9.5 发布后掉进「未登记」的 UNKNOWN。
+	{Distro: domain.DistroRHEL, Version: "8", EOLDate: date(2029, 5, 31),
+		Note: "RHEL 8 生命周期内，仅检测"},
+	{Distro: domain.DistroRHEL, Version: "9", EOLDate: date(2032, 5, 31),
+		Note: "RHEL 9 生命周期内，仅检测"},
+	{Distro: domain.DistroRHEL, Version: "10", EOLDate: date(2035, 5, 31),
+		Note: "RHEL 10 生命周期内，仅检测"},
+
+	// SUSE：SLES 按 Service Pack 登记（15 SP6 = 15.6），Leap 按小版本登记。
+	{Distro: domain.DistroSLES, Version: "15.6", Codename: "sp6",
+		EOLDate: date(2028, 12, 31), Note: "SLES 15 SP6，仅检测"},
+	{Distro: domain.DistroOpenSUSE, Version: "16.0", Codename: "leap",
+		EOLDate: date(2027, 12, 31), Note: "openSUSE Leap 16.0，仅检测"},
+
 	// 滚动发行版：没有 EOL 概念，但也永远不开放自动修复。
 	{Distro: domain.DistroArch, Version: "rolling",
 		Note: "滚动发行，仅检测；pacman 预演不可靠，不开放自动修复"},

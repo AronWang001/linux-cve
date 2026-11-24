@@ -79,6 +79,20 @@ type Parser interface {
 	Parse(ctx context.Context, in ParseInput) (*ParseResult, error)
 }
 
+// ParserReady 判断某个源当前是否已有可用的解析器。
+//
+// 按文档发布的源（CSAF）用 DocumentParserFor 判断：它们的解析单位是
+// 一份公告而不是一个文件，若仍按 ParserFor 判断，RHEL/SUSE 会被
+// 误报成「解析器未实现」，`feed update --all` 也会静默跳过它们。
+func ParserReady(s Source) (bool, string) {
+	if s.DocumentSet {
+		p, reason := DocumentParserFor(s.ID)
+		return p != nil, reason
+	}
+	p, reason := ParserFor(s.ID)
+	return p != nil, reason
+}
+
 // ParserFor 返回某个源对应的解析器；尚未实现时返回 nil 与原因。
 //
 // 未实现的源必须明确报错，不能静默返回「零条记录」：

@@ -127,7 +127,7 @@ func (e *env) feedStatus(ctx context.Context, args []string) (exitcode.Code, err
 	}
 	out := make([]sourceDTO, 0, len(rows))
 	for _, r := range rows {
-		_, reason := feed.ParserFor(r.ID)
+		_, reason := feed.ParserReason(r.ID)
 		dto := sourceDTO{
 			ID: string(r.ID), Name: r.Name, TrustLevel: string(r.TrustLevel),
 			Signature: r.SignatureKind, ParserReady: reason == "",
@@ -183,17 +183,23 @@ func (e *env) feedUpdate(ctx context.Context, args []string) (exitcode.Code, err
 	fs.SetOutput(e.stderr)
 	var release string
 	var all, asJSON bool
+	var since int
 	fs.StringVar(&release, "release", "", "目标 release（Ubuntu 用 codename，Alpine 用 3.20 形式）")
 	fs.BoolVar(&all, "all", false, "更新全部已实现解析器的情报源")
 	fs.BoolVar(&asJSON, "json", false, "以 JSON 输出")
-	if err := fs.Parse(args); err != nil {
+	fs.IntVar(&since, "since", 0, "只同步该年份及以后发布的公告（仅 CSAF 源有效，0 表示全部）")
+	// Go 的 flag 遇到第一个位置参数就停止解析，`feed update rhel-csaf --since 2026`
+	// 会把 --since 当成源名。这里先把参数分成「标志」与「位置参数」两段，
+	// 让两种写法都能用——命令行工具不该因为词序不同就报「未知情报源」。
+	flagArgs, positional := splitFlags(args, map[string]bool{"all": true, "json": true})
+	if err := fs.Parse(flagArgs); err != nil {
 		return exitcode.Usage, nil
 	}
 	if err := e.ensureConfig(); err != nil {
 		return exitcode.Error, err
 	}
 
-	ids := fs.Args()
+	ids := positional
 	if !all && len(ids) == 0 {
 		return exitcode.Usage, apperr.New(exitcode.Usage, "cli.feed",
 			"feed update 需要指定情报源，或用 --all 更新全部")
@@ -202,7 +208,7 @@ func (e *env) feedUpdate(ctx context.Context, args []string) (exitcode.Code, err
 	targets := make([]feed.Source, 0, len(ids))
 	if all {
 		for _, s := range feed.Sources() {
-			if _, reason := feed.ParserFor(s.ID); reason != "" {
+			if ok, reason := feed.ParserReady(s); !ok {
 				fmt.Fprintf(e.stderr, "跳过 %s：%s\n", s.ID, reason)
 				continue
 			}
@@ -216,6 +222,16 @@ func (e *env) feedUpdate(ctx context.Context, args []string) (exitcode.Code, err
 					"未知的情报源 %q", id)
 			}
 			targets = append(targets, s)
+		}
+	}
+
+	// --since 只对按文档发布的源有意义：单文件源本身就是全量快照，
+	// 按年份裁剪没有语义。这里统一应用，未使用该字段的源自然忽略。
+	if since > 0 {
+		for i := range targets {
+			if targets[i].DocumentSet {
+				targets[i].SinceYear = since
+			}
 		}
 	}
 
@@ -262,6 +278,20 @@ func (e *env) feedUpdate(ctx context.Context, args []string) (exitcode.Code, err
 			failed++
 			continue
 		}
+		// A 级源：公钥按固化指纹加载，验签器随源装配。
+		// 加载失败必须让该源整体失败——没有验签就不是 A 级，
+		// 不能悄悄降级成「HTTPS 拿到了就算数」。
+		if src.TrustLevel == domain.TrustLevelA {
+			v, verr := feed.LoadKeyFromURL(ctx, u.Fetcher, src.KeyURL, src.PublicKeyFP)
+			if verr != nil {
+				results = append(results, resultDTO{SourceID: string(src.ID), Error: verr.Error()})
+				fmt.Fprintf(e.stderr, "%s：%s\n", src.ID, verr)
+				failed++
+				continue
+			}
+			u.Verifier = v
+		}
+
 		res, uerr := u.UpdateSource(ctx, src, rel)
 		if uerr != nil {
 			results = append(results, resultDTO{SourceID: string(src.ID), Release: rel, Error: uerr.Error()})
@@ -408,4 +438,37 @@ func truncateText(s string, n int) string {
 		return string(r)
 	}
 	return string(r[:n-1]) + "…"
+}
+
+// splitFlags 把命令行参数拆成「标志」与「位置参数」。
+//
+// boolFlags 列出不需要取值的标志，其余带 "-" 的参数按「后面跟一个值」处理；
+// 含 "=" 的写法（--since=2026）自身已带值，不再吞下一个参数。
+// 这样既能 `feed update --since 2026 rhel-csaf`，也能
+// `feed update rhel-csaf --since 2026`。
+func splitFlags(args []string, boolFlags map[string]bool) (flags, positional []string) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			positional = append(positional, args[i+1:]...)
+			break
+		}
+		if len(a) < 2 || a[0] != '-' {
+			positional = append(positional, a)
+			continue
+		}
+		flags = append(flags, a)
+		if strings.Contains(a, "=") {
+			continue
+		}
+		name := strings.TrimLeft(a, "-")
+		if boolFlags[name] {
+			continue
+		}
+		if i+1 < len(args) {
+			i++
+			flags = append(flags, args[i])
+		}
+	}
+	return flags, positional
 }

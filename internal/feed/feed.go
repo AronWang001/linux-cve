@@ -82,6 +82,20 @@ type Source struct {
 	// 只把解压结果交给解析器；两者不能混为一谈。
 	Archive bool
 
+	// DocumentSet 表示该源按「一个公告一份文档」发布（CSAF）。
+	// 这类源不能用单文件解析器：几万份文档，URL 是目录而不是文件，
+	// 必须走 updateDocumentSet 的索引驱动流程。
+	DocumentSet bool
+
+	// IndexURL 是变更清单（changes.csv）的完整地址。
+	IndexURL string
+
+	// KeyURL 是公告签名公钥的地址，仅 A 级源使用。
+	KeyURL string
+
+	// SinceYear 限定只处理该年份及以后的文档；0 表示不裁剪。
+	SinceYear int
+
 	// Disabled 表示本期不接入该源（含原因），不得静默跳到「无漏洞」结论。
 	Disabled       bool
 	DisabledReason string
@@ -104,6 +118,14 @@ func (s Source) Validate() error {
 	}
 	if s.MaxBytes <= 0 {
 		return fmt.Errorf("feed: 情报源 %s 的下载上限必须为正", s.ID)
+	}
+	if s.DocumentSet && s.IndexURL == "" {
+		// 没有清单就无从知道要抓哪些文档；静默抓目录列表会把
+		// HTML 索引页当数据解析。
+		return fmt.Errorf("feed: 情报源 %s 按文档发布，但缺少变更清单地址", s.ID)
+	}
+	if s.DocumentSet && s.URL == "" {
+		return fmt.Errorf("feed: 情报源 %s 按文档发布，但缺少文档根地址", s.ID)
 	}
 	return nil
 }
