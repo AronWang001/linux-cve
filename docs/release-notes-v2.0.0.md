@@ -6,7 +6,7 @@ v2 用同一套判定模型回答「本机任意已安装包是否有已知漏�
 ## 安装
 
 ```bash
-curl -fsSL https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v2.0.0/install.sh | sudo sh
+curl -fsSL https://github.com/AronWang001/linux-cve/releases/download/v2.0.0/install.sh | sudo sh
 ```
 
 脚本按架构下载发布包、校验 SHA256、安装到 `/usr/local/bin`，不写配置、不改 `/etc`。

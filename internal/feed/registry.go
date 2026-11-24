@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // 各源端点，2026-11-24 逐个实测确认（HTTP 206/200，字节可读）。

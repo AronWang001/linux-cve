@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/buildinfo"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/apperr"
+	"github.com/AronWang001/linux-cve/internal/buildinfo"
+	"github.com/AronWang001/linux-cve/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
 )
 
 // SaveInventory 在单事务内持久化一次资产快照，返回快照行 ID。

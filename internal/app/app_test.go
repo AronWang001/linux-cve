@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/database"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/database"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
 )
 
 // runCLI 执行一次命令，返回退出码、stdout 与 stderr。

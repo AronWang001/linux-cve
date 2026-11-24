@@ -6,10 +6,10 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/database"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/inventory"
+	"github.com/AronWang001/linux-cve/internal/apperr"
+	"github.com/AronWang001/linux-cve/internal/database"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/inventory"
 )
 
 // collector 返回资产采集器；测试可注入合成夹具，默认真实采集。

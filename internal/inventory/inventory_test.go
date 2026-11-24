@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // mockRunner 按命令名与参数返回预置输出，模拟只读查询工具。

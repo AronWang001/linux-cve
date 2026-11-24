@@ -18,7 +18,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // RedHatParser 解析 Red Hat CSAF 安全公告（csaf_security_advisory）。

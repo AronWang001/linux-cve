@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // ubuntuFixture 覆盖四种关键形态：

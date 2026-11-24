@@ -3,9 +3,9 @@ package inventory
 import (
 	"strings"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/apperr"
+	"github.com/AronWang001/linux-cve/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
 )
 
 // SystemInfo 是只读识别出的系统事实，不含任何判定结论。

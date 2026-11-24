@@ -18,7 +18,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // SUSEParser 解析 SUSE/openSUSE CSAF 安全公告。

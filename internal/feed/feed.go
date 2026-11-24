@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // 下载与解析护栏默认值（docs/phase3.0-design.md §3.5）。

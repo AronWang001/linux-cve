@@ -14,9 +14,9 @@
 package version
 
 import (
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/apperr"
+	"github.com/AronWang001/linux-cve/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
 )
 
 // Compare 按包管理器原生规则比较两个原始版本串，返回 -1 / 0 / 1。

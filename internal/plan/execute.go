@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/version"
+	"github.com/AronWang001/linux-cve/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/version"
 )
 
 // Runner 执行外部命令，便于测试注入。

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/database"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/database"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // fakeStore 是内存版情报存储，测试不依赖数据库。

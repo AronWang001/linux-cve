@@ -7,8 +7,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/database"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/database"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // ErrOffline 表示离线模式下拒绝任何网络更新。

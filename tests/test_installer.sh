@@ -220,7 +220,7 @@ assert_has "6 个文件 SHA256 校验通过"
 assert_has "启动 fix.sh --list-distros --yes"
 assert_has "fix:--list-distros --yes"
 # 一键模式必须把「重新执行」的命令传给 fix.sh，否则重启后的提示指向不存在的本地文件
-assert_has "boot:curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v${INSTALLER_VERSION}/install.sh | sudo bash -s --"
+assert_has "boot:curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve/v${INSTALLER_VERSION}/install.sh | sudo bash -s --"
 end_case
 
 begin_case "管道执行：哈希不符仍然中止"

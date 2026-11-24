@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/feed"
+	"github.com/AronWang001/linux-cve/internal/feed"
 )
 
 // TestAggregateCoverage 固定「整体覆盖」的聚合语义。

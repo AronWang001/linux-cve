@@ -10,10 +10,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/buildinfo"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/database"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/apperr"
+	"github.com/AronWang001/linux-cve/internal/buildinfo"
+	"github.com/AronWang001/linux-cve/internal/database"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
 )
 
 // runVersion 输出构建信息。

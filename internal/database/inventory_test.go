@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // sampleInventory 构造一个合法快照（含内核映射证据）。

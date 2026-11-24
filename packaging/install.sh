@@ -6,12 +6,12 @@
 #   linux-cve feed update --all && linux-cve scan
 #
 # 用法：
-#   curl -fsSL https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v2.0.0/install.sh | sudo sh
+#   curl -fsSL https://github.com/AronWang001/linux-cve/releases/download/v2.0.0/install.sh | sudo sh
 #   VERSION=v2.0.0 DEST=/usr/local/bin sh install.sh
 
 set -eu
 
-REPO="AronWang001/linux-cve-2026-98432-fix"
+REPO="AronWang001/linux-cve"
 VERSION="${VERSION:-v2.0.0}"
 DEST="${DEST:-/usr/local/bin}"
 BASE="https://github.com/${REPO}/releases/download/${VERSION}"

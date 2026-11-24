@@ -75,9 +75,9 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           go build -trimpath \
             -ldflags "-s -w \
-              -X github.com/AronWang001/linux-cve-2026-98432-fix/internal/buildinfo.Version=${version} \
-              -X github.com/AronWang001/linux-cve-2026-98432-fix/internal/buildinfo.Commit=${GITHUB_SHA} \
-              -X github.com/AronWang001/linux-cve-2026-98432-fix/internal/buildinfo.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              -X github.com/AronWang001/linux-cve/internal/buildinfo.Version=${version} \
+              -X github.com/AronWang001/linux-cve/internal/buildinfo.Commit=${GITHUB_SHA} \
+              -X github.com/AronWang001/linux-cve/internal/buildinfo.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             -o dist/${BINARY} ./cmd/linux-cve
           ls -l dist/${BINARY}
 

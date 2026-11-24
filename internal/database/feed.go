@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/apperr"
+	"github.com/AronWang001/linux-cve/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
 )
 
 // FeedSourceRow 是 feed_sources 的一行配置。

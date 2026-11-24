@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // UbuntuParser 解析 Ubuntu OVAL（每个 release 一份 bz2 压缩 XML）。

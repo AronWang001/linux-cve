@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/support"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/version"
+	"github.com/AronWang001/linux-cve/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/support"
+	"github.com/AronWang001/linux-cve/internal/version"
 )
 
 // Candidate 是一条判定结果中与修复有关的部分。

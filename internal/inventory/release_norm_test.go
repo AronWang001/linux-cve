@@ -3,7 +3,7 @@ package inventory
 import (
 	"testing"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // TestNormalizeRelease 固定「VERSION_ID → 情报源登记粒度」的收敛规则。

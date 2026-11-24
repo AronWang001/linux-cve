@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/app"
+	"github.com/AronWang001/linux-cve/internal/app"
 )
 
 func main() {

@@ -3,7 +3,7 @@ package feed
 import (
 	"testing"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // TestEverySourceDeclaresDistros 保证每个源都声明了自己覆盖的发行版。

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/apperr"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
 )
 
 // newTestDB 在临时目录创建独立数据库，测试结束自动关闭并删除。

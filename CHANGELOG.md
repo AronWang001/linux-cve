@@ -2,6 +2,20 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 仓库更名（2026-11-24）
+
+仓库 `AronWang001/linux-cve-2026-98432-fix` → `AronWang001/linux-cve`。
+Go 模块路径、发布物下载地址、安装脚本与全部文档一并更新。
+
+v2.0.0 已经不是「修某一个 CVE」的补丁仓库，旧名把它和一堆 PoC 仓库混在一起，
+看到名字的人会以为它只处理 98432 那一个洞。名字收回成 `linux-cve`，
+与二进制名、命令名一致。
+
+- 旧地址仍然 301 跳转，但不再作为推荐入口。
+- 模块路径变为 `github.com/AronWang001/linux-cve`；发布当天完成，无外部导入者，
+  因此不单独占用一个新的版本号。
+- `v2.0.0` 的 tag 与 release 在新名下重建，资产仅路径字符串不同。
+
 ## [2.0.0] - 2026-11-24
 
 v2.0.0 是完整重写：v1.x 只回答「本机内核是否受 CVE-2026-98432 影响」，
@@ -279,7 +293,7 @@ v2 用同一套判定模型覆盖任意 CVE、任意已安装包，情报来自�
 
 ### 变更
 
-- 一键执行：`curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.1.2/install.sh | sudo bash`。命令直接进入检测与修复流程，确认提示从 `/dev/tty` 读取，不再要求先把 `install.sh` 落盘。
+- 一键执行：`curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve/v1.1.2/install.sh | sudo bash`。命令直接进入检测与修复流程，确认提示从 `/dev/tty` 读取，不再要求先把 `install.sh` 落盘。
 - 只读与免交互用法：`| sudo bash -s -- --check`、`| sudo bash -s -- --yes`。`--yes` 仍不能绕过发行版白名单、公告核验与版本校验。
 - `install.sh`：用法注释同步为新的一键执行方式；`REPO` / `VERSION` 保持动态推导与集中定义。
 - `README.md`：按「真实、结构清晰、可操作」的要求重写。删除装饰性提示与宣传性表述，补齐系统要求、执行方式、参数、退出码、支持状态、判定流程、测试与已知限制；核对全部官方版本号与公告链接，未在真实 AWS 实例执行的验证在「已知限制」中明确标注。

@@ -1,6 +1,6 @@
 package inventory
 
-import "github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+import "github.com/AronWang001/linux-cve/internal/domain"
 
 // KernelFacts 是内核相关事实，只含证据充分的映射，不含任何修复/重启结论。
 type KernelFacts struct {

@@ -15,8 +15,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/apperr"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
 )
 
 // Duration 让 TOML 里的 "60s" 这类字符串可直接解析为时间间隔。

@@ -14,8 +14,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/apperr"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
 )
 
 // driverName 是 modernc.org/sqlite 注册的驱动名。

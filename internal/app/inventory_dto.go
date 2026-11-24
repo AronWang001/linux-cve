@@ -3,8 +3,8 @@ package app
 import (
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/inventory"
+	"github.com/AronWang001/linux-cve/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/inventory"
 )
 
 // inventorySchemaVersion 是 inventory --json 输出的结构版本号。

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
 )
 
 // Error 是携带退出码与操作上下文的错误。

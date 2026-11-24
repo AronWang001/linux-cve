@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/apperr"
+	"github.com/AronWang001/linux-cve/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
 )
 
 // FixRow 是「某发行版某 release 中某包被某 CVE 修复」的一条可比较事实。

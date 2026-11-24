@@ -19,7 +19,7 @@ crontab -l | grep -i cve-2026-98432     # 确认
 crontab -e                              # 删掉相关行
 
 # 2. 装 v2
-curl -fsSL https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v2.0.0/install.sh | sudo bash
+curl -fsSL https://github.com/AronWang001/linux-cve/releases/download/v2.0.0/install.sh | sudo bash
 
 # 3. 首次同步情报（Debian 约 18 秒，CSAF 源按需加 --since）
 sudo linux-cve feed update --all
@@ -88,7 +88,7 @@ v2 不改动系统里任何 v1 的痕迹（v1 是解压即用的脚本）。想�
 # 移除 v2 的数据（可选，v2 不写 /etc 之外的配置）
 sudo rm -rf /var/lib/linux-cve /etc/linux-cve
 # 重新下载 v1.3.2
-curl -fsSL https://github.com/AronWang001/linux-cve-2026-98432-fix/releases/download/v1.3.2/fix.sh -o fix.sh
+curl -fsSL https://github.com/AronWang001/linux-cve/releases/download/v1.3.2/fix.sh -o fix.sh
 ```
 
 已经用 v2 做过的包升级不会自动回退——那是包管理器的事，不是本工具的职责。

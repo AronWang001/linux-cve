@@ -12,11 +12,11 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/config"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/inventory"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/logging"
+	"github.com/AronWang001/linux-cve/internal/apperr"
+	"github.com/AronWang001/linux-cve/internal/config"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/inventory"
+	"github.com/AronWang001/linux-cve/internal/logging"
 )
 
 // globalFlags 是所有子命令共享的全局参数。

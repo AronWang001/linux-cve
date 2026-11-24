@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/apperr"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
 )
 
 // ParseLevel 解析日志级别字符串。

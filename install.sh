@@ -12,23 +12,23 @@
 #
 # 用法（以下命令可直接整条粘贴执行）：
 #   一键修复（交互式，确认后直接执行修复）：
-#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.2/install.sh | sudo bash
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve/v1.3.2/install.sh | sudo bash
 #
 #   只读检查：
-#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.2/install.sh | sudo bash -s -- --check
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve/v1.3.2/install.sh | sudo bash -s -- --check
 #
 #   免交互执行（跳过确认，但不跳过白名单、公告核验与版本校验）：
-#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.2/install.sh | sudo bash -s -- --yes
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve/v1.3.2/install.sh | sudo bash -s -- --yes
 #
 #   先下载再审查：
-#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve-2026-98432-fix/v1.3.2/install.sh -o install.sh
+#     curl -fsSL https://raw.githubusercontent.com/AronWang001/linux-cve/v1.3.2/install.sh -o install.sh
 #     less install.sh && sudo bash install.sh
 #
 # License: MIT
 
 set -Eeuo pipefail
 
-REPO="AronWang001/linux-cve-2026-98432-fix"
+REPO="AronWang001/linux-cve"
 VERSION="1.3.2"
 TAG="v${VERSION}"
 SRC_NAME="${REPO##*/}"

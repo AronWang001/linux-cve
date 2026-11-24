@@ -3,9 +3,9 @@ package app
 import (
 	"testing"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/feed"
+	"github.com/AronWang001/linux-cve/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/feed"
 )
 
 // TestScanExitCode 退出码必须让脚本能分清三种结局：

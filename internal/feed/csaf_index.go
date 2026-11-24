@@ -26,8 +26,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/database"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/database"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // DocInput 是「一份公告文档」的解析输入。

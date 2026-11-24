@@ -1,4 +1,4 @@
-module github.com/AronWang001/linux-cve-2026-98432-fix
+module github.com/AronWang001/linux-cve
 
 go 1.27.4
 

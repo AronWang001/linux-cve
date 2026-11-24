@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/apperr"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
 )
 
 // migrationFS 内嵌全部迁移 SQL，二进制自带 Schema，不依赖外部文件。

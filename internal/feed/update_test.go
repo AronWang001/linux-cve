@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/database"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/database"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // newUpdateFixture 组装一个可用的 Updater：临时数据库 + 临时 Artifact 目录。

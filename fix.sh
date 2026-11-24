@@ -31,7 +31,7 @@ readonly SCRIPT_VERSION="1.3.2"
 # 会让「请执行 sudo bash xxx」的提示指向错误的文件。
 readonly SCRIPT_NAME="${BASH_SOURCE[0]##*/}"
 readonly CVE_ID="CVE-2026-98432"
-readonly PROJECT_URL="https://github.com/AronWang001/linux-cve-2026-98432-fix"
+readonly PROJECT_URL="https://github.com/AronWang001/linux-cve"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly SCRIPT_DIR

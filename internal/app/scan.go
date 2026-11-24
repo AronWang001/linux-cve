@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/apperr"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/database"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/feed"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/matcher"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/support"
+	"github.com/AronWang001/linux-cve/internal/apperr"
+	"github.com/AronWang001/linux-cve/internal/database"
+	"github.com/AronWang001/linux-cve/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/feed"
+	"github.com/AronWang001/linux-cve/internal/matcher"
+	"github.com/AronWang001/linux-cve/internal/support"
 )
 
 // scanReport 是一次扫描的完整结果，供 scan/list/show/report 复用。

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // archFixture 覆盖四种 status 与多包场景，字段形态取自真实数据。

@@ -84,7 +84,7 @@ func NewFetcher(timeout time.Duration) *Fetcher {
 		},
 		Retries:   DefaultRetries,
 		RetryBase: DefaultRetryBase,
-		UserAgent: "linux-cve/2.0 (+https://github.com/AronWang001/linux-cve-2026-98432-fix)",
+		UserAgent: "linux-cve/2.0 (+https://github.com/AronWang001/linux-cve)",
 		Now:       time.Now,
 	}
 }

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/database"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/exitcode"
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/inventory"
+	"github.com/AronWang001/linux-cve/internal/database"
+	"github.com/AronWang001/linux-cve/internal/exitcode"
+	"github.com/AronWang001/linux-cve/internal/inventory"
 )
 
 // cliMockRunner 是 app 包内的只读命令模拟器，用于 CLI inventory 测试。

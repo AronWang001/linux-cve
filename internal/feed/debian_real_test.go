@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AronWang001/linux-cve-2026-98432-fix/internal/domain"
+	"github.com/AronWang001/linux-cve/internal/domain"
 )
 
 // TestDebianParseRealDataset 用真实全量 Tracker 数据验证解析器。
