@@ -232,8 +232,19 @@ func appendDebianFixes(res *ParseResult, pkg string, cve domain.CVEID, release, 
 		EvidenceURL: "https://security-tracker.debian.org/tracker/" + string(cve),
 	}
 
+	// open：发布方已确认受影响，但没有修复版本。这条必须落库——
+	// 它就是「已知有洞、暂时没有补丁」，是扫描最应该报出来的情况。
+	// undetermined：发布方尚未判定，不能当作受影响，只留 advisory 表达未知。
 	if rel.Status != "resolved" {
-		return 0
+		if rel.Status != "open" {
+			return 0
+		}
+		fix := base
+		fix.Channel = pickDebianChannel(codename, rel.Repositories)
+		fix.FixedVersion = "" // 空版本 = 确认受影响、无修复包
+		fix.FixedVersionSource = domain.FixVersionOfficial
+		res.Fixes = append(res.Fixes, fix)
+		return 1
 	}
 
 	if isRealFixedVersion(rel.FixedVersion) {
