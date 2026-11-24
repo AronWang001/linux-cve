@@ -31,9 +31,15 @@ const (
 	DebianMaxBytes int64 = 140 << 20
 
 	// MaxExpandRatio 是解压比上限，超出判定 zip-bomb 并拒绝。
-	MaxExpandRatio = 8
+	//
+	// 设计稿原定 8:1，实测不成立：Ubuntu OVAL noble 的
+	// com.ubuntu.noble.cve.oval.xml.bz2 压缩 11.9MB、解压 284MB，比率 23.8:1。
+	// 按 8:1 会把所有 Ubuntu 数据判成 zip-bomb。上调到 30 仍能拦住
+	// 典型的 1000:1 压缩炸弹，同时放行真实数据。
+	MaxExpandRatio = 30
 
 	// MaxExpandedBytes 是解压后总体积上限。
+	// 实测最大单源（Ubuntu OVAL noble）为 284MB，留一倍余量。
 	MaxExpandedBytes int64 = 512 << 20
 
 	// MaxJSONDepth 是 JSON 嵌套深度上限，防止深递归拖垮解析。

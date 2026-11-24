@@ -56,15 +56,16 @@ func TestMigrate0002Upgrade(t *testing.T) {
 	if err != nil {
 		t.Fatalf("迁移失败: %v", err)
 	}
-	if n != 2 {
-		t.Errorf("空库应应用 2 个迁移（0001+0002），实际 %d", n)
+	want := wantMigrationCount(t)
+	if n != want {
+		t.Errorf("空库应应用 %d 个迁移（含 0001+0002），实际 %d", want, n)
 	}
 	st, err := d.Status(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.SchemaVersion != 2 {
-		t.Errorf("schema 版本应为 2，实际 %d", st.SchemaVersion)
+	if st.SchemaVersion != want {
+		t.Errorf("schema 版本应为 %d，实际 %d", want, st.SchemaVersion)
 	}
 	if len(st.Pending) != 0 {
 		t.Errorf("不应有 pending: %+v", st.Pending)

@@ -95,6 +95,24 @@ type Advisory struct {
 	UpdatedAt      *time.Time
 	URL            string
 	FetchedAt      time.Time
+
+	// 溯源字段（docs/phase3.0-design.md §2）：不内嵌原始全文，
+	// 只保存指向不可变 Artifact 的引用与原始记录定位，
+	// 使任何一条判定都能回到发布方的原始字节。
+	ArtifactSHA256 string // 指向 feed_artifacts.sha256
+	RawLocator     string // JSON 路径 / OVAL definition id / CSAF 文档 id
+	RawRecordHash  string // sha256(原始记录字节)，用于判断单条是否变化
+	ParserVersion  string // 产出该记录的解析器版本
+
+	// RetractedAt 非空表示该公告已被发布方撤回。
+	// 撤回不删除记录，只在匹配时排除，保留历史可追溯。
+	RetractedAt *time.Time
+
+	// VendorStatus 是发布方对该记录的原始状态串，逐字保留。
+	// Debian: resolved / open / undetermined；Red Hat VEX: known_affected / fixed / ...
+	// 它和 VendorStatusReason 一起构成「为什么是这个结论」的第一手证据，
+	// 匹配器不得靠猜测推断状态。
+	VendorStatus string
 }
 
 // AdvisoryUID 由内容派生，保证重复导入幂等，且不依赖插入顺序。
@@ -135,6 +153,25 @@ type AdvisoryFix struct {
 	FixedVersion string     // 原始字符串，逐字保留
 	FixedAt      *time.Time
 	EvidenceURL  string
+
+	// FixedVersionSource 说明 FixedVersion 从哪来：
+	//   ""（空，等价 official）     发布方直接声明 → 可严格比较
+	//   FixVersionRepositoryObserved 取自仓库当前版本 → 只能弱判
+	//
+	// 二者语义不同：官方声明的版本是「首次修复版本」，
+	// 仓库当前版本只是「现在能装到的版本」，用它判「受影响」会误报。
+	FixedVersionSource string
+}
+
+// FixedVersionSource 的取值。
+const (
+	FixVersionOfficial           = "official"
+	FixVersionRepositoryObserved = "repository-observed"
+)
+
+// IsOfficial 判断该修复版本是否由发布方直接声明。
+func (f AdvisoryFix) IsOfficial() bool {
+	return f.FixedVersionSource == "" || f.FixedVersionSource == FixVersionOfficial
 }
 
 // Validate 校验修复记录。任何一项缺失都说明该记录不可用于判定。
