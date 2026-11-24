@@ -2,31 +2,107 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [2.0.0] - 未发布（开发中，分支 `feat/v2.0.0`）
+## [2.0.0] - 2026-11-24
 
-v2.0 将只处理 CVE-2026-98432 的 Bash 工具重写为 Go 实现的多 CVE 检测与自动修复工具。当前进度为阶段 1（工程基础）：只建立了可构建、可测试、可迁移的骨架，尚未实现资产采集、情报接入、匹配、计划与执行。`scan`、`list`、`show`、`plan`、`fix`、`report`、`feed`、`support` 已注册但返回退出码 8。
+v2.0.0 是完整重写：v1.x 只回答「本机内核是否受 CVE-2026-98432 影响」，
+v2 用同一套判定模型覆盖任意 CVE、任意已安装包，情报来自六个官方源。
 
 ### 新增
 
-- Go 1.27.4 工程：`cmd/linux-cve` 入口、`internal/` 模块划分、`Makefile`、`go.mod`/`go.sum`。
-- CLI 分发与统一退出码（0/1/2/3/4/5/6/7/8/130），退出码只在一处调用 `os.Exit`。已实现 `version`、`help`、`db status`、`db migrate`。
-- 配置：TOML 文件 + `LINUX_CVE_*` 环境变量 + 命令行参数，优先级为默认值 < 文件 < 环境变量 < 命令行；`allow_auto_fix` 为硬开关。
-- 日志：基于 `log/slog`，支持 text/json，固定写 stderr，保证 stdout 只承载业务输出。
-- 数据库：SQLite（`modernc.org/sqlite` 1.62.0，纯 Go 无 cgo），WAL、外键、busy_timeout 连接参数，内嵌 SQL 迁移与校验和校验。
-- 领域模型：源码包/二进制包区分、三个独立状态维度（`VulnState`/`RemediationState`/`RuntimeState`）、证据结构、资产快照哈希、自动修复准入判定。
-- 文档：`docs/architecture.md`、`docs/data-model.md`、`docs/support-matrix.md`、`docs/cli.md`、`docs/phase1-report.md`。
+- **Go 实现**（v1 是 Bash）：`cmd/linux-cve` 入口 + `internal/` 分层，
+  纯 Go 无 cgo（SQLite 用 `modernc.org/sqlite`），可直接交叉编译到 amd64 / arm64。
+- **六个官方情报源**：Debian Security Tracker、Ubuntu OVAL、Alpine secdb、
+  Arch Security Tracker、Red Hat CSAF、SUSE CSAF。实测入库 481,139 条公告、
+  2,062,599 条修复记录（详见 `docs/data-sources.md`）。
+- **内容寻址的不可变存储**：原始发布物按 sha256 落盘为 Artifact，
+  归一化数据只存引用；同步为「替换快照」语义，不出现新旧混合的中间态。
+- **信任分级**：A 级（Red Hat、SUSE）每份文档有 GPG 分离签名且指纹硬编码，
+  B 级（其余四个）依赖 HTTPS 与 SHA256。`signature_status` 与 `integrity_status`
+  分列记录，不合并成「已验证」。
+- **判定引擎**：三状态维度（`VulnState` / `RemediationState` / `RebootState`）
+  独立建模；发行版原生版本比较（dpkg 的 `~` 回移、rpm 的 epoch 优先级）；
+  Debian/Ubuntu 的源码包桥接；覆盖判定 `COVERED` / `PARTIAL` / `UNKNOWN`。
+- **子命令**：`inventory`、`feed update|status`、`scan`、`list`、`show`、
+  `plan`、`fix`、`report`、`support`、`db status|migrate`、`version`、`help`。
+- **受控自动修复**：`plan` 预演，`fix` 执行后强制复检。五道闸门
+  （支持矩阵 / 生命周期 / 包管理器能力 / `allow_auto_fix` 配置 / `--yes`）
+  全过才动系统；`--package` 可把范围缩到指定包。
+- **附带变更核对**：执行前后比对包集合，升级顺带装了超过
+  `max_collateral_packages` 个新包时明确报出并返回失败。
+- **退出码 9（COVERAGE）**：扫描完成但情报覆盖不足时，脚本不会把它读成「安全」。
+- **文档**：`README.md`、`README.en.md`、`docs/cli.md`、`docs/data-sources.md`、
+  `docs/security-model.md`、`docs/support-matrix.md`、`docs/troubleshooting.md`、
+  `docs/migration-v1-v2.md`。
+- **`install.sh`**：按架构下载发布包、校验 SHA256、安装二进制。
 
 ### 变更
 
-- 数据库唯一键：修复版本的唯一性锚定到「情报源 + 公告 + CVE + 发行版 + release + 渠道 + 包类型 + 包名 + 架构」，避免同包名跨发行版互相覆盖。
-- 状态语义：`PENDING_REBOOT`、`PENDING_RESTART` 不再与 `VULNERABLE`/`FIXED` 混在同一枚举，改为独立维度；服务待重启只以 `CONFIRMED`/`LIKELY`/`UNKNOWN` 表达证据强度。
-- 支持范围：Amazon Linux 2 标记为 `legacy`（EOL 2026-06-30），仅保留检测；Arch 因 `pacman -Sp` 无法提供可靠变更集，不开放自动修复。
+- **退出码重排**：v1 的 `3` 是「待重启」，v2 的 `3` 是「发现受影响项」；
+  v1 的 `2/4/6/7/8` 在 v2 有不同含义。迁移对照表见
+  `docs/migration-v1-v2.md` §3。
+- **覆盖判定按发行版过滤**：Debian 机器上没同步 RHEL 情报不再算缺口。
+  此前无关源会把覆盖状态永久压成 `PARTIAL`，干净机器因此拿不到退出码 0。
+- **`allow_auto_fix` 默认 `false` 且真正生效**：此前该配置项被解析但未被
+  `plan`/`fix` 读取，命令行 `--yes` 可以绕过它。现在它是硬闸门，
+  `plan` 也会显示「不可执行」及原因。
+- `report` 的输出改为 Markdown，写文件用 `--out`（v1 是 `--report [文件]`）。
+- `list --limit` 的头部改为「共 N 条，显示前 M 条」，不再把显示条数当总数。
+
+### 修复
+
+- **「确认受影响但无修复版本」被丢弃**：Debian Tracker 的 `status=open`、
+  Alpine secdb 的空版本键此前不产出记录，导致这些包在扫描里变成
+  「情报库无记录」，而事实是「有洞且没有补丁」——正好把最该报警的情况说反。
+  修复后修复记录从 197,151 升到 222,161，受影响判定从 7,065 升到 10,230。
+- **CSAF 产品树解析得到零条修复记录**：Red Hat 的产品树是「兄弟」结构，
+  带 CPE 的 `product_name` 与带 purl 的 `architecture → product_version`
+  并列挂在 vendor 下，包并不是产品名的子节点；`product_status.fixed`
+  引用的又是 relationship 的完整产品 ID。按父子关系实现时，一份公告 0 条修复，
+  而公告计数正常——最容易被误读成「没漏洞」的形态。
+- **指纹归一化把数字也减了 32**：`normalizeFingerprint` 对十六进制逐字符做
+  `- 'a' + 10`，遇到数字 `0-9` 同样偏移，导致含数字的指纹（Red Hat 的
+  `77E79ABE…`）永远匹配不上。
+- **已接入的 CSAF 源被误报「解析器未实现」**：覆盖判定与报告用单文件
+  解析器表（`ParserFor`）判断，RHEL/SUSE 按文档发布，落在这张表之外。
+  报告因此把「库里已有 66,991 条 RHEL 公告」说成「本期不提供数据」。
+- **SUSE 文档含非 UTF-8 字节**：Latin-1 的 `×` 会让严格解码整份失败，
+  改为按替换字符处理，不丢文档。
+- **SUSE `recommended` 状态被漏掉**：修复状态不在 `fixed` 而在
+  `product_status.recommended`，漏掉则 SUSE 的「已修复」全部消失。
+- **`feed update <源> --since N` 报「未知的情报源」**：Go 的 flag 在首个位置
+  参数后停止解析，`--since` 被当成源名。改为先分离标志再解析。
+
+### 实测（2026-11-24，Debian 13 x86_64 测试机）
+
+| 项目 | 结果 |
+| --- | --- |
+| 六源入库 | 481,139 公告 / 2,062,599 修复 / SQLite 1.5GB / 原始发布物 6.1GB |
+| Debian 全量 | 210,415 公告 / 222,161 修复 / 17.9s |
+| Ubuntu OVAL noble | 270.8MB XML / 37,611 公告 / 48,617 修复 / 20.0s |
+| Alpine secdb 3.20 | 8,299 公告 / 8,344 修复 / 3.1s |
+| Arch Tracker | 8,035 公告 / 7,401 修复 / 303 不受影响 / 1.8s |
+| Red Hat CSAF（2026 切片 10,409 份） | 66,991 公告 / 810,817 修复 / 26,327 不受影响 / 失败 0 |
+| SUSE CSAF（2026 切片 13,561 份） | 149,788 公告 / 965,304 修复 / 失败 0 / 11.5 分钟 |
+| 扫描（Debian 13） | 判定 124,470 条：受影响 10,230、已修复 100,985、未知 13,255；覆盖 `COVERED`；退出码 3 |
+| 自动修复（实机） | `libcap2`、`libcap2-bin` 由 `1:2.75-10+b1` 升到 `1:2.75-10+deb13u1+b3`，复检通过，重扫受影响降为 10,228 |
 
 ### 测试
 
-- 67 个 Go 单元测试，全部 PASS，0 SKIP；`go build ./...`、`go vet ./...`、`go test -race ./...` 均通过。
-- 覆盖：配置加载与覆盖优先级、退出码映射、迁移首次/重复执行、种子数据、唯一键跨发行版冲突、外键约束、校验和篡改检测、旧二进制打开新库、状态维度不变量、自动修复准入表、快照哈希顺序无关性、CLI 各分支退出码。
-- v1.3.2 的 Bash 实现与测试未改动，仍为当前发布版本。
+- 237 个单元测试 PASS，0 FAIL；`go build ./...`、`go vet ./...` 通过。
+- 另有 5 项「真实数据集」测试默认 SKIP（需要 90MB Tracker JSON 等外部数据），
+  提供真实发布物后全部 PASS，解析结果与线上同步数字逐条一致。
+- 新增覆盖：CSAF 产品树与 purl、指纹归一化、索引清单安全路径校验、
+  Debian `open` 状态映射、`scan` 退出码优先级、覆盖聚合语义、
+  `plan` 合并与闸门、`fix` 执行与复检、附带变更比对。
+
+### 已知限制
+
+- 情报源的「未收录」不等于「不受影响」；覆盖不足以退出码 9 表达，无法消除该不确定。
+- 自动修复只开放 Debian 12/13；其余发行版数据与解析器就绪但未在该发行版实机验收。
+- RHEL 与 SUSE 的 VEX 源本期不接入，因此「不受影响」只有 RHSA 内的
+  `known_not_affected`（26,327 条），SUSE 侧没有此类结论。
+- Alpine 3.19–3.21 均已 EOL；新 release 需在 `internal/support/matrix.go`
+  登记，未登记按 `UNKNOWN` 处理，这是有意为之。
 
 ## [1.3.2] - 2026-11-04
 
